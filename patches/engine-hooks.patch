@@ -1,0 +1,79 @@
+diff --git a/Assets/Scripts/AI/AI.cs b/Assets/Scripts/AI/AI.cs
+index 78a2c45..35a2129 100644
+--- a/Assets/Scripts/AI/AI.cs
++++ b/Assets/Scripts/AI/AI.cs
+@@ -41,6 +41,13 @@ public partial class AI: MonoBehaviour
+ 
+ 	}
+ 
++	/// <summary>
++	/// Runs after the draw phase and before the clock phase, right after OnTurnStart. Can wait on slow work like an LLM call.
++	/// </summary>
++	public virtual IEnumerator OnTurnStartRoutine(){
++		yield break;
++	}
++
+ 
+ 	/// <summary>
+ 	/// Count how many other cards have a combo with this on the hand or field
+diff --git a/Assets/Scripts/AI/AIManager.cs b/Assets/Scripts/AI/AIManager.cs
+index 4028cd4..26d3769 100644
+--- a/Assets/Scripts/AI/AIManager.cs
++++ b/Assets/Scripts/AI/AIManager.cs
+@@ -71,6 +71,16 @@ public class AIManager : MonoBehaviour
+ 				}
+ 				player.ai = ai;
+ 			}
++			if(versionNumber == 8){
++				//LLM-planned AI, uses the same AI file format as version 6 for its fallback decisions
++				AIVersion8 ai = gameObject.AddComponent<AIVersion8>();
++				if(MainMenuSingleton.instance.isAndroidVersion){
++					ai.AIFileLines = Resources.Load<TextAsset>("AIData/"+aiFileName).text.Split('\n');
++				}else{
++					ai.AIFileLines = File.ReadAllLines(Application.streamingAssetsPath+"/AIData/"+aiFileName+".txt");
++				}
++				player.ai = ai;
++			}
+ 
+ 		}else{
+ 			Debug.LogWarning("Fallback to generic AI");
+diff --git a/Assets/Scripts/GameManager.cs b/Assets/Scripts/GameManager.cs
+index 6d8fab3..6a38dfa 100644
+--- a/Assets/Scripts/GameManager.cs
++++ b/Assets/Scripts/GameManager.cs
+@@ -220,6 +220,7 @@ public class GameManager : MonoBehaviour
+ 		yield return StartCoroutine(DrawPhase());
+ 		if(turnPlayer.isAI){
+ 			turnPlayer.ai.OnTurnStart();
++			yield return turnPlayer.ai.StartCoroutine(turnPlayer.ai.OnTurnStartRoutine());
+ 		}
+ 		phase = Phase.Clock;
+ 		SetPhaseTexts("Clock Phase");
+diff --git a/Assets/Scripts/OptionsScreen.cs b/Assets/Scripts/OptionsScreen.cs
+index ee32790..7a7ad21 100644
+--- a/Assets/Scripts/OptionsScreen.cs
++++ b/Assets/Scripts/OptionsScreen.cs
+@@ -24,6 +24,7 @@ public class OptionsScreen : MonoBehaviour
+ 		sendImageOffButton.interactable = MainMenuSingleton.instance.myCustomSleevesVisibleToOpponent;
+ 		unlitShaderOnButton.interactable = !MainMenuSingleton.instance.useUnlitShaders;
+ 		unlitShaderOffButton.interactable = MainMenuSingleton.instance.useUnlitShaders;
++		gameObject.AddComponent<LLMSettingsPanel>();
+     }
+ 
+     public void MainMenuPressed(){
+diff --git a/Assets/StreamingAssets/AIData/AIList.txt b/Assets/StreamingAssets/AIData/AIList.txt
+index f71cc86..d1cc7c3 100644
+--- a/Assets/StreamingAssets/AIData/AIList.txt
++++ b/Assets/StreamingAssets/AIData/AIList.txt
+@@ -26,4 +26,9 @@ Version 5
+ Deck AI_AxisChurch
+ Name Konosuba Axis Church (old)
+ File AxisAIVersion5
+-Version 5
+\ No newline at end of file
++Version 5
++
++Deck AI_ShionAqua_LLM
++Name Hololive Shion Aqua (LLM planner)
++File Shion Aqua AI
++Version 8 //AIVersion8: Claude writes a plan each turn, AIVersion6 handles the rest

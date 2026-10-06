@@ -1,0 +1,2 @@
+# The simulator's files use CRLF line endings, so the patch must keep them byte for byte.
+*.patch -text

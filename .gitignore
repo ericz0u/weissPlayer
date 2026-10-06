@@ -1,0 +1,29 @@
+# This repo holds only the LLM AI mod, not the simulator. It lives inside a full simulator
+# project, so everything is ignored except the mod's own files listed below.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/patches/
+/patches/.originals/
+
+!/Assets/
+/Assets/*
+!/Assets/Scripts/
+/Assets/Scripts/*
+!/Assets/Scripts/AI/
+/Assets/Scripts/AI/*
+!/Assets/Scripts/AI/AIVersion8.cs
+!/Assets/Scripts/AI/AIVersion8.cs.meta
+!/Assets/Scripts/AI/LLM/
+!/Assets/Scripts/AI/LLM.meta
+
+!/Assets/StreamingAssets/
+/Assets/StreamingAssets/*
+!/Assets/StreamingAssets/DefaultDecks/
+/Assets/StreamingAssets/DefaultDecks/*
+!/Assets/StreamingAssets/DefaultDecks/AI_ShionAqua_LLM.txt
+!/Assets/StreamingAssets/DefaultDecks/AI_ShionAqua_LLM.txt.meta
+
+.DS_Store
+anthropic_api_key.txt
