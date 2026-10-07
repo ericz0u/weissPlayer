@@ -1,6 +1,6 @@
 # weissPlayer
 
-An LLM-planned AI opponent for the Weiss Schwarz Simulator (Unity 2020.3.48f1).
+An LLM-planned AI opponent for the Weiss Schwarz Simulator (Unity 2020.3.48f1). Only up to version 6.3 cause thats what's released
 
 This repository is a mod: it contains only the new AI code and a small patch for the simulator's own files. It does not include the simulator itself. You need your own copy of the simulator's Unity project.
 
