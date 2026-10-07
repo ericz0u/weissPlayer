@@ -5,9 +5,11 @@ using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// LLM-planned AI. Once per turn (after draw, before clock) Claude writes a TurnPlan; the small decisions
-/// (clock, discard, salvage/search, counter, encore) follow that plan. Anything the plan doesn't cover,
-/// and every decision when no plan is available, falls back to AIVersion6 using the deck's normal AI file.
+/// LLM-planned AI in two tiers. Once per turn (after draw, before clock) a strategist model writes a TurnPlan:
+/// the overall gameplan plus the small decisions (clock, discard, salvage/search, counter, encore, climax).
+/// A cheaper executor model then plays the main phase one action at a time, choosing from the engine's legal
+/// actions with the plan in mind. Anything the plan doesn't cover, and every decision when no plan is available
+/// or the executor keeps failing, falls back to AIVersion6 using the deck's normal AI file.
 /// </summary>
 public class AIVersion8 : AIVersion6
 {
@@ -16,19 +18,34 @@ public class AIVersion8 : AIVersion6
 	private string deckNotes = "";
 	private string logPath = null;
 	private float gameCost = 0;
+	private string executorSystemPrompt = null;
+
+	/// <summary>Most actions the executor may take in one main phase, so a confused model can't loop forever.</summary>
+	private const int MaxMainPhaseActions = 15;
+	/// <summary>After this many unusable answers in one main phase, AIVersion6 finishes the phase.</summary>
+	private const int MaxExecutorFailures = 2;
 
 	private const string RulesPrimer =
 @"You are the strategist for a Weiss Schwarz deck in a 1v1 game. Each of your turns, after the draw phase and before the clock phase, you write the gameplan.
-A separate rules engine plays the cards. Your plan steers these decisions until your next turn:
+
+Start from a read of the game: both players' damage and levels, how close each side is to losing, the opponent's board and its threats, how many climaxes are left in their deck (how likely your damage is to be cancelled), and what the opponent is likely to do next turn. From that, decide this turn's posture, how much damage to push, whether to wipe or trade with their board, what to field in each slot, and whether to play a climax.
+
+A cheaper model plays your main phase action by action from your plan, so make field_plan, play_order, acts_and_events, stock_budget and climax_plan concrete. Your plan also directly decides, until your next turn:
 - Clocking this turn (should_clock, clock_card).
-- Which cards to keep in hand (hold_cards) and which to discard first (discard_priority). This applies to hand-size discards at end of turn and discard costs.
+- Which cards to keep in hand (hold_cards) and which to discard first (discard_priority), for hand-size discards and discard costs.
 - What to take with salvage and search effects (search_priority).
+- Whether to play a climax and which (climax_plan).
 - Countering during the opponent's attacks (counter_policy, protect_cards, stock_to_reserve).
 - Which characters not to encore (skip_encore).
-Main-phase plays and attacks are still handled by the engine.
+Attacks are still chosen by the rules engine; attack_plan is guidance for now.
 
-Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from.
-Think about damage race, level timing, clock-kill range, the opponent's likely climax count, and the stock you need for finishers and counters.";
+Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
+
+	private const string ExecutorPrimer =
+@"You play the main phase of a Weiss Schwarz game for one player, following a gameplan written by a stronger strategist model at the start of the turn.
+Each step you get the plan, the current game state, what you've already done this main phase, and a numbered list of every legal action right now. Pick exactly one option number.
+Follow the plan: field the characters it asks for in the slots it asks for, use the acts and events it names, stay within its stock budget, and end the main phase once the plan is carried out or nothing useful is left. Adapt if the board changed from what the plan expected, for example after an on-play effect drew or searched cards.
+Placing a character on an occupied slot sends the current one to the waiting room. Center stage slots attack; back stage slots support.";
 
 	public override void AfterDeckCreated() {
 		// AIVersion6 strips comments from AIFileLines, so keep the strategy comments at the top of the file first.
@@ -91,6 +108,117 @@ Think about damage race, level timing, clock-kill range, the opponent's likely c
 		}else{
 			window.ShowError(raw ?? "No plan returned.");
 		}
+	}
+
+	public override IEnumerator AIMainPhase() {
+		ResetTurnPlans();
+		string executor = ClaudePlanner.executorModel;
+		if(plan == null || string.IsNullOrEmpty(executor)){
+			yield return StartCoroutine(base.AIMainPhase());
+			yield break;
+		}
+		if(executorSystemPrompt == null){
+			executorSystemPrompt = ExecutorPrimer + "\n\n# Your deck\n" + GameStateSerializer.DeckList(player);
+		}
+
+		LLMThoughtsWindow window = LLMThoughtsWindow.Instance;
+		window.BeginSection("Main phase - " + executor);
+		int startStock = player.stock.size;
+		int failures = 0;
+		List<string> history = new List<string>();
+		for(int step = 0; step < MaxMainPhaseActions && player.game.phase == Phase.Main; step++){
+			int stockLeft = plan.stock_budget - (startStock - player.stock.size);
+			List<MainPhaseActions.Option> options = MainPhaseActions.Build(player, stockLeft, out int hidden);
+			if(options.Count == 1){
+				Decision("Main: nothing left to do");
+				break;
+			}
+
+			string prompt = "# Gameplan\n" + plan.DescribeForMainPhase()
+				+ "\n# Game state\n" + GameStateSerializer.CurrentState(player)
+				+ "\n# Done so far this main phase\n" + (history.Count > 0 ? string.Join("\n", history) : "nothing yet")
+				+ "\n\n# Stock budget left: " + stockLeft + (hidden > 0 ? " (" + hidden + " cards in hand cost more and aren't listed)" : "")
+				+ "\n\n# Legal actions\n" + MainPhaseActions.Numbered(options);
+
+			string json = null;
+			string error = null;
+			float started = Time.realtimeSinceStartup;
+			yield return StartCoroutine(ClaudePlanner.Request(executor, "low", MainPhaseActions.ChoiceSchema, executorSystemPrompt, prompt, 4000,
+				(j, e) => { json = j; error = e; }));
+			string cost = AddCost(executor, Time.realtimeSinceStartup - started);
+
+			MainPhaseActions.Choice choice = null;
+			if(json != null){
+				try{
+					choice = JsonUtility.FromJson<MainPhaseActions.Choice>(json);
+				}catch(System.Exception){
+					choice = null;
+				}
+			}
+			if(choice == null || choice.option < 0 || choice.option >= options.Count){
+				failures++;
+				Decision("Main: unusable answer (" + (error ?? json) + ")");
+				if(failures >= MaxExecutorFailures){
+					break;
+				}
+				continue;
+			}
+
+			MainPhaseActions.Option chosen = options[choice.option];
+			Decision("Main: " + chosen.description + " - " + choice.reason + " [" + cost + "]");
+			if(chosen.run == null){
+				yield break;// ended the main phase
+			}
+			string before = GameStateSerializer.CurrentState(player);
+			yield return StartCoroutine(chosen.run());
+			if(GameStateSerializer.CurrentState(player) == before){
+				failures++;
+				history.Add("- Tried: " + chosen.description + " (it had no effect)");
+				Decision("Main: that action had no effect");
+				if(failures >= MaxExecutorFailures){
+					break;
+				}
+			}else{
+				history.Add("- " + chosen.description);
+			}
+		}
+
+		if(failures >= MaxExecutorFailures && player.game.phase == Phase.Main){
+			Decision("Main: handing the rest of the main phase to AIVersion6");
+			yield return StartCoroutine(base.AIMainPhase());
+		}
+	}
+
+	public override IEnumerator AIClimaxPhase() {
+		if(plan == null || player.game.firstTurn){
+			yield return StartCoroutine(base.AIClimaxPhase());
+			yield break;
+		}
+		if(plan.climax_plan.play == false){
+			Decision("Climax: none, per plan (" + plan.climax_plan.reason + ")");
+			yield break;
+		}
+		DeckCard climax = player.hand.GetContents().FirstOrDefault(c => c.IsClimax() && c.name == plan.climax_plan.climax && c.CanPlayFromHand());
+		if(climax == null){
+			Decision("Climax: planned " + plan.climax_plan.climax + " isn't playable, using the regular AI");
+			yield return StartCoroutine(base.AIClimaxPhase());
+			yield break;
+		}
+		Decision("Climax: " + climax.name + " per plan");
+		yield return StartCoroutine(player.PlayClimax(climax));
+	}
+
+	/// <summary>Adds a request's cost to the game total and returns a short "time, cost" note.</summary>
+	private string AddCost(string forModel, float seconds){
+		ClaudePlanner.Usage usage = ClaudePlanner.lastUsage;
+		if(usage == null){
+			return seconds.ToString("0.0") + "s";
+		}
+		float cost = ClaudePlanner.EstimateCost(usage, forModel);
+		gameCost += cost;
+		Log("Usage (" + forModel + "): input " + usage.input_tokens + ", cache write " + usage.cache_creation_input_tokens + ", cache read "
+			+ usage.cache_read_input_tokens + ", output " + usage.output_tokens + " | $" + cost.ToString("0.000") + ", game $" + gameCost.ToString("0.00"));
+		return seconds.ToString("0.0") + "s, $" + cost.ToString("0.000");
 	}
 
 	public override DeckCard ChooseCardToClock(List<DeckCard> options, bool clockPhase) {

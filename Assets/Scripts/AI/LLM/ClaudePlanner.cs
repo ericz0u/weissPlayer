@@ -12,7 +12,10 @@ using UnityEngine.Networking;
 /// </summary>
 public static class ClaudePlanner
 {
+	/// <summary>Models for the once-per-turn strategist.</summary>
 	public static readonly string[] Models = { "claude-opus-5-5", "claude-sonnet-5-5" };
+	/// <summary>Models for the main-phase executor; "" means AIVersion6 plays the main phase.</summary>
+	public static readonly string[] ExecutorModels = { "claude-sonnet-5-5", "claude-haiku-4-5", "" };
 	/// <summary>Higher thinks longer per turn and costs more.</summary>
 	public static readonly string[] Efforts = { "low", "medium", "high", "xhigh", "max" };
 	public static int timeoutSeconds = 300;
@@ -22,6 +25,7 @@ public static class ClaudePlanner
 	private const string ModelPref = "LLM_Model";
 	private const string EffortPref = "LLM_Effort";
 	private const string WorkspacePref = "LLM_WorkspaceId";
+	private const string ExecutorPref = "LLM_ExecutorModel";
 
 	public static string model{
 		get{ return PlayerPrefs.GetString(ModelPref, Models[0]); }
@@ -31,6 +35,11 @@ public static class ClaudePlanner
 	public static string effort{
 		get{ return PlayerPrefs.GetString(EffortPref, "medium"); }
 		set{ PlayerPrefs.SetString(EffortPref, value); PlayerPrefs.Save(); }
+	}
+
+	public static string executorModel{
+		get{ return PlayerPrefs.GetString(ExecutorPref, ExecutorModels[0]); }
+		set{ PlayerPrefs.SetString(ExecutorPref, value); PlayerPrefs.Save(); }
 	}
 
 	[System.Serializable] public class Usage { public int input_tokens; public int output_tokens; public int cache_creation_input_tokens; public int cache_read_input_tokens; }
@@ -49,19 +58,28 @@ public static class ClaudePlanner
 		public StreamError error;
 	}
 
+	/// <summary>
+	/// For automated tests: when set, requests aren't sent and this returns the JSON answer instead,
+	/// given the model and the user prompt.
+	/// </summary>
+	public static System.Func<string, string, string> offlineResponder = null;
+
 	/// <summary>Token usage of the most recent request, or null.</summary>
 	public static Usage lastUsage = null;
 
 	/// <summary>
 	/// Approximate cost in dollars at list prices. Thinking tokens are included in output_tokens.
-	/// Opus 5.5: $4 in / $20 out per million. Sonnet 5.5: $2 / $10. Cache writes are 1.25x input, cache reads $0.20.
+	/// Per million tokens: Opus 5.5 $4 in / $20 out, Sonnet 5.5 $2 / $10, Haiku 4.5 $1 / $5.
+	/// Cache writes are 1.25x input; cache reads are $0.20 ($0.10 on Haiku).
 	/// </summary>
 	public static float EstimateCost(Usage u, string forModel){
 		if(u == null){
 			return 0;
 		}
-		float input = forModel.Contains("sonnet") ? 2f : 4f;
-		return (u.input_tokens * input + u.cache_creation_input_tokens * input * 1.25f + u.cache_read_input_tokens * 0.2f + u.output_tokens * input * 5f) / 1000000f;
+		bool haiku = forModel.Contains("haiku");
+		float input = haiku ? 1f : forModel.Contains("sonnet") ? 2f : 4f;
+		float cacheRead = haiku ? 0.1f : 0.2f;
+		return (u.input_tokens * input + u.cache_creation_input_tokens * input * 1.25f + u.cache_read_input_tokens * cacheRead + u.output_tokens * input * 5f) / 1000000f;
 	}
 
 	/// <summary>
@@ -158,34 +176,63 @@ public static class ClaudePlanner
 	}
 
 	/// <summary>
-	/// Requests a TurnPlan. Calls done(plan, rawText) with plan null on any failure, so the caller can fall back to AIVersion6.
-	/// onThinking and onText receive streamed text as it arrives (thinking is a summary, not the raw reasoning).
+	/// Requests a TurnPlan from the strategist model. Calls done(plan, rawText) with plan null on any failure,
+	/// so the caller can fall back to AIVersion6. onThinking and onText receive streamed text as it arrives
+	/// (thinking is a summary, not the raw reasoning).
 	/// </summary>
 	public static IEnumerator RequestPlan(string systemPrompt, string userPrompt, System.Action<TurnPlan, string> done,
 		System.Action<string> onThinking = null, System.Action<string> onText = null){
+		string json = null;
+		string error = null;
+		yield return Request(model, effort, TurnPlan.JsonSchema, systemPrompt, userPrompt, 32000, (j, e) => { json = j; error = e; }, onThinking, onText);
+		if(json == null){
+			done(null, error);
+			yield break;
+		}
+		TurnPlan plan = null;
+		try{
+			plan = JsonUtility.FromJson<TurnPlan>(json);
+		}catch(System.Exception e){
+			Debug.LogWarning("ClaudePlanner: could not parse plan: " + e.Message);
+		}
+		done(plan, json);
+	}
+
+	/// <summary>
+	/// One structured-output request. Calls done(json, null) on success or done(null, errorMessage) on failure.
+	/// Token usage is left in lastUsage. Haiku 4.5 takes no effort setting or adaptive thinking, so those are only
+	/// sent to the other models; for those, a refusal is retried on Anthropic's recommended fallback model.
+	/// </summary>
+	public static IEnumerator Request(string useModel, string useEffort, string schema, string systemPrompt, string userPrompt, int maxTokens,
+		System.Action<string, string> done, System.Action<string> onThinking = null, System.Action<string> onText = null){
 		lastUsage = null;
+		if(offlineResponder != null){
+			yield return null;
+			done(offlineResponder(useModel, userPrompt), null);
+			yield break;
+		}
 		string key = GetApiKey();
 		if(string.IsNullOrEmpty(key)){
 			Debug.LogWarning("ClaudePlanner: no API key. Add one in Options.");
 			done(null, "No API key. Add one in Options.");
 			yield break;
 		}
+		bool haiku = useModel.Contains("haiku");
 
 		// The system prompt holds the rules primer, deck list and deck notes, which never change during a game,
-		// so it is cached and later turns only pay full price for the current game state.
+		// so it is cached and later requests only pay full price for the current game state.
 		string body = "{"
-			+ "\"model\":" + Quote(model) + ","
-			+ "\"max_tokens\":32000,"
+			+ "\"model\":" + Quote(useModel) + ","
+			+ "\"max_tokens\":" + maxTokens + ","
 			+ "\"stream\":true,"
-			+ "\"fallbacks\":\"default\","
-			+ "\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},"
-			+ "\"output_config\":{\"effort\":" + Quote(effort) + ",\"format\":{\"type\":\"json_schema\",\"schema\":" + TurnPlan.JsonSchema + "}},"
+			+ (haiku ? "" : "\"fallbacks\":\"default\",\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},")
+			+ "\"output_config\":{" + (haiku ? "" : "\"effort\":" + Quote(useEffort) + ",") + "\"format\":{\"type\":\"json_schema\",\"schema\":" + schema + "}},"
 			+ "\"system\":[{\"type\":\"text\",\"text\":" + Quote(systemPrompt) + ",\"cache_control\":{\"type\":\"ephemeral\"}}],"
 			+ "\"messages\":[{\"role\":\"user\",\"content\":" + Quote(userPrompt) + "}]"
 			+ "}";
 
 		Usage usage = new Usage();
-		StringBuilder planText = new StringBuilder();
+		StringBuilder outputText = new StringBuilder();
 		string stopReason = null;
 		string streamError = null;
 
@@ -212,7 +259,7 @@ public static class ClaudePlanner
 					if(ev.delta.type == "thinking_delta" && string.IsNullOrEmpty(ev.delta.thinking) == false){
 						onThinking?.Invoke(ev.delta.thinking);
 					}else if(ev.delta.type == "text_delta" && ev.delta.text != null){
-						planText.Append(ev.delta.text);
+						outputText.Append(ev.delta.text);
 						onText?.Invoke(ev.delta.text);
 					}
 				break;
@@ -235,7 +282,9 @@ public static class ClaudePlanner
 			req.downloadHandler = handler;
 			req.timeout = timeoutSeconds;
 			SetHeaders(req, key, GetWorkspaceId());
-			req.SetRequestHeader("anthropic-beta", "server-side-fallback-2026-07-01");
+			if(haiku == false){
+				req.SetRequestHeader("anthropic-beta", "server-side-fallback-2026-07-01");
+			}
 
 			yield return req.SendWebRequest();
 
@@ -249,20 +298,12 @@ public static class ClaudePlanner
 		}
 
 		lastUsage = usage;
-		if(stopReason == "refusal" || stopReason == "max_tokens"){
+		if(stopReason == "refusal" || stopReason == "max_tokens" || outputText.Length == 0){
 			Debug.LogWarning("ClaudePlanner: unusable response, stop_reason=" + stopReason);
 			done(null, "Unusable response (stop_reason " + stopReason + ")");
 			yield break;
 		}
-
-		string planJson = planText.ToString();
-		TurnPlan plan = null;
-		try{
-			plan = planJson.Length == 0 ? null : JsonUtility.FromJson<TurnPlan>(planJson);
-		}catch(System.Exception e){
-			Debug.LogWarning("ClaudePlanner: could not parse plan: " + e.Message);
-		}
-		done(plan, planJson);
+		done(outputText.ToString(), null);
 	}
 
 	/// <summary>

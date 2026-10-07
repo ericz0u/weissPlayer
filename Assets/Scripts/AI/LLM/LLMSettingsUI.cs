@@ -14,6 +14,7 @@ using UnityEngine.UI;
 public static class LLMSettingsUI
 {
 	private static readonly string[] ModelLabels = { "Opus 5.5", "Sonnet 5.5" };
+	private static readonly string[] ExecutorLabels = { "Sonnet 5.5", "Haiku 4.5", "Off" };
 
 	// Layout, in fractions of the screen. The section fills the empty right column under "Use Unlit Shaders",
 	// level with "Custom Sleeve Images Visible to Opponent" on the left.
@@ -53,19 +54,22 @@ public static class LLMSettingsUI
 		status.overflowMode = TextOverflowModes.Ellipsis;
 
 		y = 0.75f;
-		RowLabel(noteTemplate, parent, "Model", y);
+		RowLabel(noteTemplate, parent, "Gameplan", y);
 		Button[] modelButtons = ButtonRow(templateButton, parent, ModelLabels, y, 0.09f);
 		y += RowHeight + 0.005f;
 		RowLabel(noteTemplate, parent, "Thinking effort", y);
 		Button[] effortButtons = ButtonRow(templateButton, parent, ClaudePlanner.Efforts, y, 0.06f);
 		y += RowHeight + 0.005f;
+		RowLabel(noteTemplate, parent, "Main phase", y);
+		Button[] executorButtons = ButtonRow(templateButton, parent, ExecutorLabels, y, 0.09f);
+		y += RowHeight + 0.005f;
 		RowLabel(noteTemplate, parent, "Thinking window", y);
 		Button[] showButtons = ButtonRow(templateButton, parent, new[]{ "turn on", "turn off" }, y, 0.07f);
 
-		// Main Menu sat where the new rows go; move it to the bottom centre.
+		// Main Menu sat where the new rows go; move it to the empty bottom of the left column, centred in it.
 		UIObjectScalerType2 mainMenu = parent.GetComponentsInChildren<UIObjectScalerType2>(true).FirstOrDefault(s => s.name == "MainMenu");
 		if(mainMenu != null){
-			mainMenu.topLeftCorner = new Vector2(mainMenu.topLeftCorner.x, 0.93f);
+			mainMenu.topLeftCorner = new Vector2(0.25f - mainMenu.size.x / 2, 0.8f);
 		}
 
 		// ---- Behaviour ----
@@ -86,6 +90,10 @@ public static class LLMSettingsUI
 			int effort = System.Array.IndexOf(ClaudePlanner.Efforts, ClaudePlanner.effort);
 			for(int i = 0; i < effortButtons.Length; i++){
 				effortButtons[i].interactable = i != effort;
+			}
+			int executor = System.Array.IndexOf(ClaudePlanner.ExecutorModels, ClaudePlanner.executorModel);
+			for(int i = 0; i < executorButtons.Length; i++){
+				executorButtons[i].interactable = i != executor;
 			}
 			showButtons[0].interactable = LLMThoughtsWindow.ShowByDefault == false;
 			showButtons[1].interactable = LLMThoughtsWindow.ShowByDefault;
@@ -144,6 +152,10 @@ public static class LLMSettingsUI
 		for(int i = 0; i < effortButtons.Length; i++){
 			int index = i;
 			effortButtons[i].onClick.AddListener(() => { ClaudePlanner.effort = ClaudePlanner.Efforts[index]; refresh(); });
+		}
+		for(int i = 0; i < executorButtons.Length; i++){
+			int index = i;
+			executorButtons[i].onClick.AddListener(() => { ClaudePlanner.executorModel = ClaudePlanner.ExecutorModels[index]; refresh(); });
 		}
 		showButtons[0].onClick.AddListener(() => { LLMThoughtsWindow.ShowByDefault = true; refresh(); });
 		showButtons[1].onClick.AddListener(() => { LLMThoughtsWindow.ShowByDefault = false; refresh(); });

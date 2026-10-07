@@ -64,6 +64,12 @@ public class LLMThoughtsWindow : MonoBehaviour
 		status = "Planning...";
 	}
 
+	/// <summary>A sub-heading within the turn, e.g. the main phase.</summary>
+	public void BeginSection(string header){
+		AppendRaw("\n<b><color=#7FB2FF>" + Escape(header) + "</color></b>\n");
+		status = header;
+	}
+
 	public void AppendThinking(string delta){
 		AppendRaw("<color=#B9B9B9>" + Escape(delta) + "</color>");
 	}
@@ -77,9 +83,21 @@ public class LLMThoughtsWindow : MonoBehaviour
 
 	public void ShowPlan(TurnPlan plan, string footer){
 		StringBuilder sb = new StringBuilder("\n<b><color=#8BE08B>Plan</color></b>: " + Escape(plan.summary) + "\n");
+		sb.Append("  <b>").Append(Escape(plan.posture)).Append("</b>, board: ").Append(Escape(plan.board_goal))
+			.Append(". Damage: ").Append(Escape(plan.damage_goal)).Append('\n');
+		sb.Append("  Opponent: ").Append(Escape(plan.opponent_read)).Append('\n');
 		foreach(string c in plan.considerations){
 			sb.Append("  - ").Append(Escape(c)).Append('\n');
 		}
+		TurnPlan.FieldPlan f = plan.field_plan;
+		sb.Append("  Field: center ").Append(Escape(f.left_center)).Append(" | ").Append(Escape(f.middle_center)).Append(" | ").Append(Escape(f.right_center))
+			.Append(", back ").Append(Escape(f.left_back)).Append(" | ").Append(Escape(f.right_back)).Append('\n');
+		AppendList(sb, "Play", plan.play_order);
+		AppendList(sb, "Acts/events", plan.acts_and_events);
+		AppendList(sb, "Remove", plan.removal_targets);
+		sb.Append("  Stock to spend: ").Append(plan.stock_budget).Append('\n');
+		sb.Append("  Climax: ").Append(plan.climax_plan.play ? Escape(plan.climax_plan.climax) : "none").Append(" - ").Append(Escape(plan.climax_plan.reason)).Append('\n');
+		sb.Append("  Attacks: ").Append(Escape(plan.attack_plan)).Append('\n');
 		sb.Append("  Clock: ").Append(plan.should_clock ? (plan.clock_card.Length > 0 ? Escape(plan.clock_card) : "yes") : "no").Append('\n');
 		AppendList(sb, "Hold", plan.hold_cards);
 		AppendList(sb, "Discard first", plan.discard_priority);

@@ -37,6 +37,55 @@ index 4028cd4..26d3769 100644
  
  		}else{
  			Debug.LogWarning("Fallback to generic AI");
+diff --git a/Assets/Scripts/AI/AIVersion6.cs b/Assets/Scripts/AI/AIVersion6.cs
+index 34425f8..3e78d36 100644
+--- a/Assets/Scripts/AI/AIVersion6.cs
++++ b/Assets/Scripts/AI/AIVersion6.cs
+@@ -2773,6 +2773,24 @@ public class AIVersion6 : AI
+ 
+ 
+ 
++	/// <summary>
++	/// Clears the plans made during the main phase. Also used by AIVersion8, which runs the main phase itself.
++	/// </summary>
++	protected void ResetTurnPlans(){
++		plannedAttacks.Clear();
++		committedBackstage.Clear();
++		savedStock = 0;
++		powerGainTargetZone = null;
++		effectTargetCommitments.Clear();
++		plannedAutoActivations.Clear();
++		plannedSearchTarget = null;
++		searchTargetIf = null;
++		costTargetIf = null;
++		plannedClimax = null;
++		keepOpenBackstage = false;
++		willUseNextAuto = false;
++	}
++
+ 	public override IEnumerator AIMainPhase() {
+ 		//Priority order (not the same as action order)
+ 		//Heal to not die to refresh
+@@ -2788,18 +2806,7 @@ public class AIVersion6 : AI
+ 		//If it cannot be defeated play downgrades if you have them (May want a main phase section for weakening the opponent)
+ 		//Repeat for each character
+ 
+-		plannedAttacks.Clear();
+-		committedBackstage.Clear();
+-		savedStock = 0;
+-		powerGainTargetZone = null;
+-		effectTargetCommitments.Clear();
+-		plannedAutoActivations.Clear();
+-		plannedSearchTarget = null;
+-		searchTargetIf = null;
+-		costTargetIf = null;
+-		plannedClimax = null;
+-		keepOpenBackstage = false;
+-		willUseNextAuto = false;
++		ResetTurnPlans();
+ 		
+ 		if(player.game.firstTurn){
+ 			//Read the first turn priority sections instead
 diff --git a/Assets/Scripts/GameManager.cs b/Assets/Scripts/GameManager.cs
 index 6d8fab3..6a38dfa 100644
 --- a/Assets/Scripts/GameManager.cs

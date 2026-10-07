@@ -27,23 +27,31 @@ public static class GameStateSerializer
 	public static string CurrentState(Player player){
 		Player opp = player.opponent;
 		StringBuilder sb = new StringBuilder();
-		sb.AppendLine("Turn " + player.game.turnCounter + (player.game.turnPlayer == player ? " (your turn)" : " (opponent's turn)"));
+		sb.AppendLine("Turn " + player.game.turnCounter + (player.game.turnPlayer == player ? " (your turn)" : " (opponent's turn)")
+			+ ", phase " + player.game.phase);
 		sb.AppendLine();
 		sb.AppendLine("== YOU ==");
 		AppendSide(sb, player, true);
+		// The AI knows its own deck's contents (not their order), so its own numbers are exact.
 		int myClimaxInDeck = player.deck.GetContents().Count(c => c.IsClimax());
-		sb.AppendLine("Deck: " + player.deck.size + " cards, " + myClimaxInDeck + " climax remaining");
+		sb.AppendLine("Deck: " + player.deck.size + " cards, " + myClimaxInDeck + " climax in it" + Odds(myClimaxInDeck, player.deck.size, "a check or damage reveals a climax"));
 		sb.AppendLine("Hand (" + player.hand.size + "): " + Names(player.hand.GetContents(), true));
 		sb.AppendLine();
 		sb.AppendLine("== OPPONENT ==");
 		AppendSide(sb, opp, false);
-		sb.AppendLine("Deck: " + opp.deck.size + " cards, about " + AI.OpponentsClimaxCountInDeck(player) + " climax not yet seen");
+		// Climaxes not yet seen are somewhere in the opponent's deck, hand or stock, so this is an estimate.
+		int unseen = AI.OpponentsClimaxCountInDeck(player);
+		int hidden = opp.deck.size + opp.hand.size + opp.stock.size;
+		sb.AppendLine("Deck: " + opp.deck.size + " cards. About " + unseen + " of their 8 climax not seen yet (in deck, hand or stock)"
+			+ Odds(unseen, hidden, "each damage instance is cancelled, roughly"));
 		sb.AppendLine("Hand: " + opp.hand.size + " cards (hidden)");
 		return sb.ToString();
 	}
 
 	private static void AppendSide(StringBuilder sb, Player p, bool mine){
-		sb.AppendLine("Level " + p.level + ", clock " + p.clock.size + "/7: " + Names(p.clock.GetContents(), false));
+		// A player loses on reaching level 4: (3 - level) more level-ups plus whatever their clock still holds.
+		int damageToLose = (3 - p.level) * 7 + (7 - p.clock.size);
+		sb.AppendLine("Level " + p.level + ", clock " + p.clock.size + "/7 (" + damageToLose + " more damage to lose): " + Names(p.clock.GetContents(), false));
 		sb.AppendLine("Level zone: " + Names(p.levelZone.GetContents(), false));
 		sb.AppendLine("Stock: " + p.stock.size);
 		sb.AppendLine("Stage:");
@@ -55,7 +63,9 @@ public static class GameStateSerializer
 		if(p.climax.size > 0){
 			sb.AppendLine("Climax zone: " + Names(p.climax.GetContents(), false));
 		}
-		sb.AppendLine("Waiting room (" + p.waitingRoom.size + "): " + Names(p.waitingRoom.GetContents(), false));
+		List<DeckCard> wr = p.waitingRoom.GetContents();
+		sb.AppendLine("Waiting room (" + p.waitingRoom.size + ": " + wr.Count(c => c.IsCharacter()) + " characters, " + wr.Count(c => c.IsEvent()) + " events, "
+			+ wr.Count(c => c.IsClimax()) + " climax; refresh when the deck runs out): " + Names(wr, false));
 		if(p.memory.size > 0){
 			sb.AppendLine("Memory: " + Names(p.memory.GetContents().Where(c => c.faceUp || mine), false));
 		}
@@ -68,6 +78,13 @@ public static class GameStateSerializer
 			return;
 		}
 		sb.AppendLine(label + ": " + card.name + " [L" + card.GetLevel() + " " + card.GetPower() + "p " + card.GetSoul() + "s " + card.battlePosition + "]");
+	}
+
+	private static string Odds(int count, int total, string what){
+		if(total <= 0){
+			return "";
+		}
+		return " (" + (100f * count / total).ToString("0") + "% chance " + what + ")";
 	}
 
 	private static string Names(IEnumerable<DeckCard> cards, bool withStats){
