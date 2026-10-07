@@ -38,29 +38,34 @@ public static class LLMSettingsUI
 		Label(titleTemplate, parent, "Claude AI (LLM opponent decks)", Left, 0.49f, ColumnWidth, 0.06f, 20);
 		Label(noteTemplate, parent, "Used by AI decks set to Version 8, like AI_ShionAqua_LLM.\nYour API key is saved on this computer only.", Left, 0.54f, ColumnWidth, 0.07f, 13);
 
-		// API key row: [ key field ][Save][Test][Remove]
-		float y = 0.61f;
-		TMP_InputField keyField = KeyField(parent, templateButton, titleTemplate.font, Left + 0.02f, y, 0.22f);
+		// API key row: [ key field ][Save][Test][Remove], with the optional workspace ID field under the key field
+		float y = 0.60f;
+		TMP_InputField keyField = TextField(parent, templateButton, titleTemplate.font, Left + 0.02f, y, 0.22f,
+			"Paste your API key (sk-ant-...)", true);
 		Button save = MakeButton(templateButton, parent, "Save", 0.75f, y, 0.06f);
 		Button test = MakeButton(templateButton, parent, "Test", 0.82f, y, 0.06f);
 		Button remove = MakeButton(templateButton, parent, "Remove", 0.89f, y, 0.06f);
-		TextMeshProUGUI status = Label(noteTemplate, parent, "", Left, y + RowHeight + 0.005f, ColumnWidth, 0.04f, 12);
+		y += RowHeight + 0.005f;
+		TMP_InputField workspaceField = TextField(parent, templateButton, titleTemplate.font, Left + 0.02f, y, 0.22f,
+			"Workspace ID, if needed", false);
+		y += RowHeight + 0.005f;
+		TextMeshProUGUI status = Label(noteTemplate, parent, "", Left, y, ColumnWidth, 0.04f, 12);
 		status.overflowMode = TextOverflowModes.Ellipsis;
 
-		y = 0.715f;
+		y = 0.75f;
 		RowLabel(noteTemplate, parent, "Model", y);
 		Button[] modelButtons = ButtonRow(templateButton, parent, ModelLabels, y, 0.09f);
-		y += RowHeight + 0.01f;
+		y += RowHeight + 0.005f;
 		RowLabel(noteTemplate, parent, "Thinking effort", y);
 		Button[] effortButtons = ButtonRow(templateButton, parent, ClaudePlanner.Efforts, y, 0.06f);
-		y += RowHeight + 0.01f;
+		y += RowHeight + 0.005f;
 		RowLabel(noteTemplate, parent, "Thinking window", y);
 		Button[] showButtons = ButtonRow(templateButton, parent, new[]{ "turn on", "turn off" }, y, 0.07f);
 
 		// Main Menu sat where the new rows go; move it to the bottom centre.
 		UIObjectScalerType2 mainMenu = parent.GetComponentsInChildren<UIObjectScalerType2>(true).FirstOrDefault(s => s.name == "MainMenu");
 		if(mainMenu != null){
-			mainMenu.topLeftCorner = new Vector2(mainMenu.topLeftCorner.x, 0.91f);
+			mainMenu.topLeftCorner = new Vector2(mainMenu.topLeftCorner.x, 0.93f);
 		}
 
 		// ---- Behaviour ----
@@ -69,9 +74,9 @@ public static class LLMSettingsUI
 		UnityAction refresh = () => {
 			bool hasTyped = keyField.text.Trim().Length > 0;
 			bool hasKey = string.IsNullOrEmpty(ClaudePlanner.GetApiKey()) == false;
-			save.interactable = hasTyped;
+			save.interactable = hasTyped || workspaceField.text.Trim().Length > 0;
 			test.interactable = (hasTyped || hasKey) && testing == false;
-			remove.interactable = ClaudePlanner.HasSavedKey();
+			remove.interactable = ClaudePlanner.HasSavedKey() || ClaudePlanner.GetWorkspaceId().Length > 0;
 			test.GetComponentInChildren<TextMeshProUGUI>().text = testing ? "Testing..." : "Test";
 			status.text = message.Length > 0 ? message : "API key: " + KeyStatus();
 			int model = System.Array.IndexOf(ClaudePlanner.Models, ClaudePlanner.model);
@@ -88,26 +93,39 @@ public static class LLMSettingsUI
 
 		UnityAction saveKey = () => {
 			string key = CleanKey(keyField.text);
-			if(key.Length == 0){
+			string workspace = CleanKey(workspaceField.text);
+			if(key.Length == 0 && workspace.Length == 0){
 				return;
 			}
-			ClaudePlanner.SaveApiKey(key);
-			keyField.text = "";
-			message = key.StartsWith("sk-ant-") ? "Key saved (ends in " + key.Substring(key.Length - 4) + "). Press Test to check it."
-				: "Saved, but Anthropic keys usually start with sk-ant-.";
+			message = "";
+			if(key.Length > 0){
+				ClaudePlanner.SaveApiKey(key);
+				keyField.text = "";
+				message = key.StartsWith("sk-ant-") ? "Key saved (ends in " + key.Substring(key.Length - 4) + "). "
+					: "Saved, but Anthropic keys usually start with sk-ant-. ";
+			}
+			if(workspace.Length > 0){
+				ClaudePlanner.SaveWorkspaceId(workspace);
+				workspaceField.text = "";
+				message += "Workspace saved. ";
+			}
+			message += "Press Test to check it.";
 			refresh();
 		};
 		save.onClick.AddListener(saveKey);
 		keyField.onSubmit.AddListener(_ => saveKey());
+		workspaceField.onSubmit.AddListener(_ => saveKey());
 		keyField.onValueChanged.AddListener(_ => refresh());
+		workspaceField.onValueChanged.AddListener(_ => refresh());
 
 		test.onClick.AddListener(() => {
 			// Test what's typed if there is something, otherwise the saved key.
 			string key = keyField.text.Trim().Length > 0 ? CleanKey(keyField.text) : ClaudePlanner.GetApiKey();
+			string workspace = workspaceField.text.Trim().Length > 0 ? CleanKey(workspaceField.text) : ClaudePlanner.GetWorkspaceId();
 			testing = true;
 			message = "";
 			refresh();
-			screen.StartCoroutine(ClaudePlanner.TestApiKey(key, (ok, result) => {
+			screen.StartCoroutine(ClaudePlanner.TestApiKey(key, workspace, (ok, result) => {
 				testing = false;
 				message = result;
 				refresh();
@@ -115,7 +133,8 @@ public static class LLMSettingsUI
 		});
 		remove.onClick.AddListener(() => {
 			ClaudePlanner.SaveApiKey("");
-			message = "Saved key removed.";
+			ClaudePlanner.SaveWorkspaceId("");
+			message = "Saved key and workspace ID removed.";
 			refresh();
 		});
 		for(int i = 0; i < modelButtons.Length; i++){
@@ -138,12 +157,14 @@ public static class LLMSettingsUI
 	}
 
 	private static string KeyStatus(){
+		string workspace = ClaudePlanner.GetWorkspaceId();
+		string workspaceText = workspace.Length > 0 ? ", workspace " + workspace : "";
 		if(ClaudePlanner.HasSavedKey()){
 			string key = ClaudePlanner.GetApiKey();
-			return "saved (ends in " + key.Substring(Mathf.Max(0, key.Length - 4)) + ")";
+			return "saved (ends in " + key.Substring(Mathf.Max(0, key.Length - 4)) + ")" + workspaceText;
 		}
 		if(string.IsNullOrEmpty(ClaudePlanner.GetApiKey()) == false){
-			return "from the ANTHROPIC_API_KEY variable or key file";
+			return "from the ANTHROPIC_API_KEY variable or key file" + workspaceText;
 		}
 		return "not set";
 	}
@@ -223,11 +244,12 @@ public static class LLMSettingsUI
 	}
 
 	/// <summary>
-	/// A single-line password field. The text scrolls inside the field, so a long pasted key can't change the layout.
+	/// A single-line text field. The text scrolls inside the field, so a long pasted key can't change the layout.
 	/// </summary>
-	private static TMP_InputField KeyField(RectTransform parent, Button styleFrom, TMP_FontAsset font, float x, float y, float width){
+	private static TMP_InputField TextField(RectTransform parent, Button styleFrom, TMP_FontAsset font, float x, float y, float width,
+		string placeholderText, bool password){
 		// Built inactive so TMP_InputField's OnEnable sees its text components and creates the caret.
-		GameObject go = new GameObject("LLM API Key Field", typeof(RectTransform), typeof(Image));
+		GameObject go = new GameObject("LLM " + (password ? "API Key" : "Workspace") + " Field", typeof(RectTransform), typeof(Image));
 		go.SetActive(false);
 		go.transform.SetParent(parent, false);
 		Image background = go.GetComponent<Image>();
@@ -244,7 +266,7 @@ public static class LLMSettingsUI
 		area.offsetMax = new Vector2(-10, -2);
 
 		TextMeshProUGUI placeholder = FieldText(area, "Placeholder", font);
-		placeholder.text = "Paste your API key (sk-ant-...)";
+		placeholder.text = placeholderText;
 		placeholder.fontStyle = FontStyles.Italic;
 		placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1);
 		TextMeshProUGUI text = FieldText(area, "Text", font);
@@ -257,7 +279,7 @@ public static class LLMSettingsUI
 		field.fontAsset = font;
 		field.targetGraphic = background;
 		field.lineType = TMP_InputField.LineType.SingleLine;
-		field.contentType = TMP_InputField.ContentType.Password;
+		field.contentType = password ? TMP_InputField.ContentType.Password : TMP_InputField.ContentType.Standard;
 		field.characterLimit = 0;
 		field.onFocusSelectAll = true;
 		Place(go, x, y, width, RowHeight);

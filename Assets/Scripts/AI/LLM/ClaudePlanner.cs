@@ -21,6 +21,7 @@ public static class ClaudePlanner
 	private const string KeyPref = "LLM_AnthropicApiKey";
 	private const string ModelPref = "LLM_Model";
 	private const string EffortPref = "LLM_Effort";
+	private const string WorkspacePref = "LLM_WorkspaceId";
 
 	public static string model{
 		get{ return PlayerPrefs.GetString(ModelPref, Models[0]); }
@@ -96,19 +97,62 @@ public static class ClaudePlanner
 		PlayerPrefs.Save();
 	}
 
-	/// <summary>Checks a key by listing models, which costs nothing. done(ok, message).</summary>
-	public static IEnumerator TestApiKey(string key, System.Action<bool, string> done){
-		using(UnityWebRequest req = UnityWebRequest.Get("https://api.anthropic.com/v1/models?limit=1")){
+	/// <summary>
+	/// Workspace ID (wrkspc_...) for keys that aren't scoped to a workspace. The API then requires it
+	/// in an anthropic-workspace-id header. Empty means the key's own workspace is used.
+	/// </summary>
+	public static string GetWorkspaceId(){
+		return PlayerPrefs.GetString(WorkspacePref, "");
+	}
+
+	public static void SaveWorkspaceId(string id){
+		id = id == null ? "" : id.Trim();
+		if(id.Length == 0){
+			PlayerPrefs.DeleteKey(WorkspacePref);
+		}else{
+			PlayerPrefs.SetString(WorkspacePref, id);
+		}
+		PlayerPrefs.Save();
+	}
+
+	private static void SetHeaders(UnityWebRequest req, string key, string workspaceId){
+		req.SetRequestHeader("content-type", "application/json");
+		req.SetRequestHeader("x-api-key", key);
+		req.SetRequestHeader("anthropic-version", "2023-06-01");
+		if(string.IsNullOrEmpty(workspaceId) == false){
+			req.SetRequestHeader("anthropic-workspace-id", workspaceId);
+		}
+	}
+
+	[System.Serializable] private class ApiError { public StreamError error; }
+
+	/// <summary>The "message" from an API error body, or null.</summary>
+	private static string ErrorMessage(string body){
+		try{
+			ApiError e = JsonUtility.FromJson<ApiError>(body);
+			return e?.error?.message;
+		}catch(System.Exception){
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Checks a key (and workspace ID) with a token count request, which is free but goes through the same
+	/// checks as a real request. done(ok, message).
+	/// </summary>
+	public static IEnumerator TestApiKey(string key, string workspaceId, System.Action<bool, string> done){
+		string body = "{\"model\":" + Quote(model) + ",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+		using(UnityWebRequest req = new UnityWebRequest("https://api.anthropic.com/v1/messages/count_tokens", "POST")){
+			req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+			req.downloadHandler = new DownloadHandlerBuffer();
 			req.timeout = 20;
-			req.SetRequestHeader("x-api-key", key);
-			req.SetRequestHeader("anthropic-version", "2023-06-01");
+			SetHeaders(req, key, workspaceId);
 			yield return req.SendWebRequest();
 			if(req.result == UnityWebRequest.Result.Success){
 				done(true, "Key works.");
-			}else if(req.responseCode == 401){
-				done(false, "Key was rejected (401).");
 			}else{
-				done(false, "Couldn't check the key: " + req.responseCode + " " + req.error);
+				string message = ErrorMessage(req.downloadHandler.text);
+				done(false, (req.responseCode == 401 ? "Key was rejected. " : "Error " + req.responseCode + ": ") + (message ?? req.error));
 			}
 		}
 	}
@@ -190,16 +234,14 @@ public static class ClaudePlanner
 			req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
 			req.downloadHandler = handler;
 			req.timeout = timeoutSeconds;
-			req.SetRequestHeader("content-type", "application/json");
-			req.SetRequestHeader("x-api-key", key);
-			req.SetRequestHeader("anthropic-version", "2023-06-01");
+			SetHeaders(req, key, GetWorkspaceId());
 			req.SetRequestHeader("anthropic-beta", "server-side-fallback-2026-07-01");
 
 			yield return req.SendWebRequest();
 
 			if(req.result != UnityWebRequest.Result.Success || streamError != null){
 				// A non-200 response is plain JSON rather than a stream, so show whatever came back.
-				string detail = streamError ?? (req.responseCode + " " + req.error + " " + handler.RawText);
+				string detail = streamError ?? (req.responseCode + ": " + (ErrorMessage(handler.RawText) ?? req.error + " " + handler.RawText));
 				Debug.LogWarning("ClaudePlanner: request failed: " + detail);
 				done(null, "Request failed: " + detail);
 				yield break;
