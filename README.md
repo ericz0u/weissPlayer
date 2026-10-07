@@ -30,7 +30,7 @@ From the root of your simulator project (the folder containing `Assets/`):
    - `Assets/Scripts/AI/AI.cs` adds an `OnTurnStartRoutine()` hook that can wait for a slow call
    - `Assets/Scripts/GameManager.cs` runs that hook between the draw and clock phases
    - `Assets/Scripts/AI/AIManager.cs` registers AI `Version 8`
-   - `Assets/Scripts/OptionsScreen.cs` adds the settings box to the Options screen
+   - `Assets/Scripts/OptionsScreen.cs` adds the Claude AI section to the Options screen
    - `Assets/StreamingAssets/AIData/AIList.txt` adds the `AI_ShionAqua_LLM` deck
 
    If the patch doesn't apply, your simulator version differs from the one this was made for; the changes are small enough to make by hand from the patch file.
@@ -39,7 +39,7 @@ From the root of your simulator project (the folder containing `Assets/`):
 
 1. Open the project in Unity Hub with Unity **2020.3.48f1**.
 2. Open `Assets/Scenes/MainMenu.unity` and press Play.
-3. Go to **Options** and paste your Anthropic API key into the **Claude AI settings** box, then press **Test key**. You can pick the model (Opus 5.5 or Sonnet 5.5) and thinking effort there too.
+3. Go to **Options**. In the **Claude AI** section below the other settings, paste your Anthropic API key and press **Save**, then **Test**. You can pick the model (Opus 5.5 or Sonnet 5.5) and thinking effort there too.
 4. Back on the main menu choose **VS Computer** and pick **AI_ShionAqua_LLM** as the AI deck.
 
 The thinking window can be dragged, resized from its bottom-right corner, and shown or hidden with **F8**. It shows the AI's hand, so hide it if you want a fair game. Per-game logs go to `~/Library/Application Support/DefaultCompany/Weiss Schwarz/LLMAgentLogs/` on macOS.

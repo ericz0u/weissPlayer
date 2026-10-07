@@ -50,14 +50,14 @@ index 6d8fab3..6a38dfa 100644
  		phase = Phase.Clock;
  		SetPhaseTexts("Clock Phase");
 diff --git a/Assets/Scripts/OptionsScreen.cs b/Assets/Scripts/OptionsScreen.cs
-index ee32790..7a7ad21 100644
+index ee32790..fa9f30e 100644
 --- a/Assets/Scripts/OptionsScreen.cs
 +++ b/Assets/Scripts/OptionsScreen.cs
 @@ -24,6 +24,7 @@ public class OptionsScreen : MonoBehaviour
  		sendImageOffButton.interactable = MainMenuSingleton.instance.myCustomSleevesVisibleToOpponent;
  		unlitShaderOnButton.interactable = !MainMenuSingleton.instance.useUnlitShaders;
  		unlitShaderOffButton.interactable = MainMenuSingleton.instance.useUnlitShaders;
-+		gameObject.AddComponent<LLMSettingsPanel>();
++		LLMSettingsUI.Build(this);
      }
  
      public void MainMenuPressed(){
