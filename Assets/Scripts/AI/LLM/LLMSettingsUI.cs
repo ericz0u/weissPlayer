@@ -7,16 +7,21 @@ using UnityEngine.UI;
 /// <summary>
 /// Adds the Claude AI settings (API key, model, effort, thinking window) to the Options screen, built at runtime
 /// from copies of the screen's own labels and buttons so it matches the existing style without editing the scene.
-/// Like the rest of the screen, a choice that is currently active shows as a greyed-out button.
+/// The screen positions everything as fractions of the screen size (UIObjectScalerType2) and scales text with the
+/// screen height (ScaleTextSizeWithScreenHeight); the new elements use the same components so they scale the same way.
+/// Like the rest of the screen, the active choice shows as a greyed-out button.
 /// </summary>
 public static class LLMSettingsUI
 {
 	private static readonly string[] ModelLabels = { "Opus 5.5", "Sonnet 5.5" };
 
-	// Layout state, measured from the existing screen in Build so the section scales with it.
-	private static float k;// pixels per unit of a 640-wide two-column layout
-	private static float buttonHeight;
-	private static float textSize;
+	// Layout, in fractions of the screen. The section fills the empty right column under "Use Unlit Shaders",
+	// level with "Custom Sleeve Images Visible to Opponent" on the left.
+	private const float Left = 0.5f;
+	private const float ColumnWidth = 0.5f;
+	private const float RowHeight = 0.05f;
+	private const float LabelWidth = 0.11f;// row labels like "Model" sit to the left of their buttons
+	private const float ButtonsLeft = Left + LabelWidth + 0.01f;
 
 	public static void Build(OptionsScreen screen){
 		Button templateButton = screen.unlitShaderOnButton;
@@ -24,77 +29,38 @@ public static class LLMSettingsUI
 		TextMeshProUGUI[] labels = parent.GetComponentsInChildren<TextMeshProUGUI>(true);
 		TextMeshProUGUI titleTemplate = labels.FirstOrDefault(t => t.text.StartsWith("Use Unlit Shaders"));
 		TextMeshProUGUI noteTemplate = labels.FirstOrDefault(t => t.text.StartsWith("Removes glare"));
-		if(titleTemplate == null || noteTemplate == null){
+		if(titleTemplate == null || noteTemplate == null || templateButton.GetComponent<UIObjectScalerType2>() == null){
 			Debug.LogWarning("LLMSettingsUI: Options screen layout changed, Claude settings not added.");
 			return;
 		}
 
-		// Each existing setting sits in a column as wide as its title label; the screen is two columns.
-		float width = titleTemplate.rectTransform.sizeDelta.x * 2;
-		k = width / 640;
-		buttonHeight = ((RectTransform)templateButton.transform).sizeDelta.y;
-		textSize = noteTemplate.fontSize + 1;
-		float gap = 8 * k;
+		Divider(parent, Left + 0.05f, 0.465f, ColumnWidth - 0.1f);
+		Label(titleTemplate, parent, "Claude AI (LLM opponent decks)", Left, 0.49f, ColumnWidth, 0.06f, 20);
+		Label(noteTemplate, parent, "Used by AI decks set to Version 8, like AI_ShionAqua_LLM.\nYour API key is saved on this computer only.", Left, 0.54f, ColumnWidth, 0.07f, 13);
 
-		// Start below the lowest existing text, measuring wrapped text rather than its rect, which it can overflow.
-		float y = 0;
-		foreach(TextMeshProUGUI t in labels){
-			if(t.GetComponentInParent<Button>() != null){
-				continue;
-			}
-			RectTransform r = t.rectTransform;
-			float height = Mathf.Max(r.sizeDelta.y * 0.6f, t.GetPreferredValues(t.text, r.sizeDelta.x, 0).y);
-			y = Mathf.Min(y, r.anchoredPosition.y - height);
-		}
-		y -= 22 * k;
+		// API key row: [ key field ][Save][Test][Remove]
+		float y = 0.61f;
+		TMP_InputField keyField = KeyField(parent, templateButton, titleTemplate.font, Left + 0.02f, y, 0.22f);
+		Button save = MakeButton(templateButton, parent, "Save", 0.75f, y, 0.06f);
+		Button test = MakeButton(templateButton, parent, "Test", 0.82f, y, 0.06f);
+		Button remove = MakeButton(templateButton, parent, "Remove", 0.89f, y, 0.06f);
+		TextMeshProUGUI status = Label(noteTemplate, parent, "", Left, y + RowHeight + 0.005f, ColumnWidth, 0.04f, 12);
+		status.overflowMode = TextOverflowModes.Ellipsis;
 
-		// Thin divider separating the Claude section from the simulator's own settings.
-		Image divider = new GameObject("LLM Divider", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-		divider.rectTransform.SetParent(parent, false);
-		Place(divider.rectTransform, 20 * k, y, width - 40 * k, 1);
-		divider.color = new Color(0, 0, 0, 0.2f);
-		divider.raycastTarget = false;
-		y -= 14 * k;
+		y = 0.715f;
+		RowLabel(noteTemplate, parent, "Model", y);
+		Button[] modelButtons = ButtonRow(templateButton, parent, ModelLabels, y, 0.09f);
+		y += RowHeight + 0.01f;
+		RowLabel(noteTemplate, parent, "Thinking effort", y);
+		Button[] effortButtons = ButtonRow(templateButton, parent, ClaudePlanner.Efforts, y, 0.06f);
+		y += RowHeight + 0.01f;
+		RowLabel(noteTemplate, parent, "Thinking window", y);
+		Button[] showButtons = ButtonRow(templateButton, parent, new[]{ "turn on", "turn off" }, y, 0.07f);
 
-		Label(titleTemplate, parent, "Claude AI (for LLM opponent decks)", 0, y, width);
-		y -= 24 * k;
-		Label(noteTemplate, parent, "Used by AI decks set to Version 8, like AI_ShionAqua_LLM. Your key is saved on this computer only.", 0, y, width);
-		y -= 26 * k;
-
-		// API key row: [ key field ][Save][Test][Remove], centred
-		float fieldWidth = 330 * k;
-		float smallButton = 70 * k;
-		float x = (width - (fieldWidth + 3 * (gap + smallButton))) / 2;
-		TMP_InputField keyField = KeyField(parent, templateButton, titleTemplate.font, x, y, fieldWidth);
-		x += fieldWidth + gap;
-		Button save = MakeButton(templateButton, parent, "Save", x, y, smallButton);
-		x += smallButton + gap;
-		Button test = MakeButton(templateButton, parent, "Test", x, y, smallButton);
-		x += smallButton + gap;
-		Button remove = MakeButton(templateButton, parent, "Remove", x, y, smallButton);
-		y -= buttonHeight + 4 * k;
-		TextMeshProUGUI status = Label(noteTemplate, parent, "", 0, y, width);
-		y -= 28 * k;
-
-		// Model (left column) and effort (right column)
-		Label(noteTemplate, parent, "Model", 0, y, width / 2);
-		Label(noteTemplate, parent, "Thinking effort (higher is slower and costs more)", width / 2, y, width / 2);
-		y -= 18 * k;
-		Button[] modelButtons = ButtonRow(templateButton, parent, ModelLabels, 0, y, 100 * k, width / 2, gap);
-		Button[] effortButtons = ButtonRow(templateButton, parent, ClaudePlanner.Efforts, width / 2, y, 56 * k, width / 2, gap);
-		y -= buttonHeight + 16 * k;
-
-		Label(noteTemplate, parent, "Show the AI's thinking window during games (F8 also toggles it in game)", 0, y, width);
-		y -= 18 * k;
-		Button[] showButtons = ButtonRow(templateButton, parent, new[]{ "turn on", "turn off" }, 0, y, 60 * k, width, gap);
-		y -= buttonHeight + 24 * k;
-
-		// Move Main Menu below the new section; it keeps its x, which centres it on the screen.
-		RectTransform mainMenu = parent.GetComponentsInChildren<Button>(true)
-			.Select(b => (RectTransform)b.transform)
-			.FirstOrDefault(rt => rt.name == "MainMenu");
+		// Main Menu sat where the new rows go; move it to the bottom centre.
+		UIObjectScalerType2 mainMenu = parent.GetComponentsInChildren<UIObjectScalerType2>(true).FirstOrDefault(s => s.name == "MainMenu");
 		if(mainMenu != null){
-			mainMenu.anchoredPosition = new Vector2(mainMenu.anchoredPosition.x, y);
+			mainMenu.topLeftCorner = new Vector2(mainMenu.topLeftCorner.x, 0.91f);
 		}
 
 		// ---- Behaviour ----
@@ -107,7 +73,7 @@ public static class LLMSettingsUI
 			test.interactable = (hasTyped || hasKey) && testing == false;
 			remove.interactable = ClaudePlanner.HasSavedKey();
 			test.GetComponentInChildren<TextMeshProUGUI>().text = testing ? "Testing..." : "Test";
-			status.text = "API key: " + KeyStatus() + (message.Length > 0 ? "   -   " + message : "");
+			status.text = message.Length > 0 ? message : "API key: " + KeyStatus();
 			int model = System.Array.IndexOf(ClaudePlanner.Models, ClaudePlanner.model);
 			for(int i = 0; i < modelButtons.Length; i++){
 				modelButtons[i].interactable = i != model;
@@ -127,7 +93,8 @@ public static class LLMSettingsUI
 			}
 			ClaudePlanner.SaveApiKey(key);
 			keyField.text = "";
-			message = key.StartsWith("sk-ant-") ? "Saved. Press Test to check it." : "Saved, but Anthropic keys usually start with sk-ant-.";
+			message = key.StartsWith("sk-ant-") ? "Key saved (ends in " + key.Substring(key.Length - 4) + "). Press Test to check it."
+				: "Saved, but Anthropic keys usually start with sk-ant-.";
 			refresh();
 		};
 		save.onClick.AddListener(saveKey);
@@ -183,22 +150,49 @@ public static class LLMSettingsUI
 
 	// ---- Building blocks ----
 
-	private static void Place(RectTransform rt, float x, float y, float width, float height){
-		rt.anchorMin = rt.anchorMax = new Vector2(0, 1);
-		rt.pivot = new Vector2(0, 1);
-		rt.anchoredPosition = new Vector2(x, y);
-		rt.sizeDelta = new Vector2(width, height);
+	/// <summary>Positions an element in screen fractions, the same way the rest of the Options screen does.</summary>
+	private static void Place(GameObject go, float x, float y, float width, float height){
+		UIObjectScalerType2 scaler = go.GetComponent<UIObjectScalerType2>();
+		if(scaler == null){
+			scaler = go.AddComponent<UIObjectScalerType2>();
+		}
+		scaler.topLeftCorner = new Vector2(x, y);
+		scaler.size = new Vector2(width, height);
+		scaler.keepHeightRatio = false;
 	}
 
-	private static TextMeshProUGUI Label(TextMeshProUGUI template, RectTransform parent, string text, float x, float y, float width){
+	/// <summary>Text sized like the screen's own: baseSize at a 600px tall screen, scaled with the screen height.</summary>
+	private static void ScaleText(GameObject go, float baseSize){
+		ScaleTextSizeWithScreenHeight scaler = go.GetComponent<ScaleTextSizeWithScreenHeight>();
+		if(scaler == null){
+			scaler = go.AddComponent<ScaleTextSizeWithScreenHeight>();
+		}
+		scaler.baseSize = baseSize;
+	}
+
+	private static TextMeshProUGUI Label(TextMeshProUGUI template, RectTransform parent, string text, float x, float y, float width, float height, float baseSize){
 		TextMeshProUGUI label = Object.Instantiate(template, parent);
 		label.name = "LLM " + (text.Length > 20 ? text.Substring(0, 20) : text);
 		label.text = text;
 		label.enableAutoSizing = false;
-		label.fontSize = template.fontSize;
-		label.enableWordWrapping = true;
-		Place(label.rectTransform, x, y, width, template.fontSize * 1.5f);
+		Place(label.gameObject, x, y, width, height);
+		ScaleText(label.gameObject, baseSize);
 		return label;
+	}
+
+	private static void RowLabel(TextMeshProUGUI template, RectTransform parent, string text, float y){
+		TextMeshProUGUI label = Label(template, parent, text, Left, y, LabelWidth, RowHeight, 13);
+		label.alignment = TextAlignmentOptions.MidlineRight;
+		label.enableWordWrapping = false;
+	}
+
+	private static void Divider(RectTransform parent, float x, float y, float width){
+		GameObject go = new GameObject("LLM Divider", typeof(RectTransform), typeof(Image));
+		go.transform.SetParent(parent, false);
+		Image image = go.GetComponent<Image>();
+		image.color = new Color(0, 0, 0, 0.2f);
+		image.raycastTarget = false;
+		Place(go, x, y, width, 0.0015f);
 	}
 
 	private static Button MakeButton(Button template, RectTransform parent, string text, float x, float y, float width){
@@ -207,29 +201,23 @@ public static class LLMSettingsUI
 		// The copy keeps the template's click handlers from the scene, so replace them.
 		button.onClick = new Button.ButtonClickedEvent();
 		button.interactable = true;
-		Place((RectTransform)button.transform, x, y, width, buttonHeight);
+		Place(button.gameObject, x, y, width, RowHeight);
+		// The label keeps the template's UIObjectScaler, which fits it inside the button.
 		TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
 		label.text = text;
-		label.enableAutoSizing = false;
-		label.fontSize = textSize;
-		label.enableWordWrapping = false;
-		label.alignment = TextAlignmentOptions.Center;
-		RectTransform labelRect = label.rectTransform;
-		labelRect.anchorMin = Vector2.zero;
-		labelRect.anchorMax = Vector2.one;
-		labelRect.pivot = new Vector2(0.5f, 0.5f);
-		labelRect.anchoredPosition = Vector2.zero;
-		labelRect.sizeDelta = Vector2.zero;
+		// The scene's button labels auto-size to fill the button, which makes short words like "low" larger than
+		// longer ones. Cap them at one screen-scaled size so a row of buttons reads evenly.
+		label.enableAutoSizing = true;
+		label.fontSizeMin = 6;
+		label.gameObject.AddComponent<CappedButtonText>();
 		return button;
 	}
 
-	/// <summary>Buttons side by side, centred in the area that starts at x.</summary>
-	private static Button[] ButtonRow(Button template, RectTransform parent, string[] texts, float x, float y, float buttonWidth, float areaWidth, float gap){
-		float rowWidth = texts.Length * buttonWidth + (texts.Length - 1) * gap;
-		float start = x + (areaWidth - rowWidth) / 2;
+	/// <summary>Buttons side by side, starting right of the row label.</summary>
+	private static Button[] ButtonRow(Button template, RectTransform parent, string[] texts, float y, float buttonWidth){
 		Button[] buttons = new Button[texts.Length];
 		for(int i = 0; i < texts.Length; i++){
-			buttons[i] = MakeButton(template, parent, texts[i], start + i * (buttonWidth + gap), y, buttonWidth);
+			buttons[i] = MakeButton(template, parent, texts[i], ButtonsLeft + i * (buttonWidth + 0.01f), y, buttonWidth);
 		}
 		return buttons;
 	}
@@ -241,9 +229,7 @@ public static class LLMSettingsUI
 		// Built inactive so TMP_InputField's OnEnable sees its text components and creates the caret.
 		GameObject go = new GameObject("LLM API Key Field", typeof(RectTransform), typeof(Image));
 		go.SetActive(false);
-		RectTransform rt = (RectTransform)go.transform;
-		rt.SetParent(parent, false);
-		Place(rt, x, y, width, buttonHeight);
+		go.transform.SetParent(parent, false);
 		Image background = go.GetComponent<Image>();
 		Image buttonImage = styleFrom.GetComponent<Image>();
 		background.sprite = buttonImage.sprite;
@@ -251,14 +237,14 @@ public static class LLMSettingsUI
 		background.color = Color.white;
 
 		RectTransform area = new GameObject("Text Area", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
-		area.SetParent(rt, false);
+		area.SetParent(go.transform, false);
 		area.anchorMin = Vector2.zero;
 		area.anchorMax = Vector2.one;
-		area.offsetMin = new Vector2(8 * k, 2);
-		area.offsetMax = new Vector2(-8 * k, -2);
+		area.offsetMin = new Vector2(10, 2);
+		area.offsetMax = new Vector2(-10, -2);
 
 		TextMeshProUGUI placeholder = FieldText(area, "Placeholder", font);
-		placeholder.text = "Paste your API key here (sk-ant-...)";
+		placeholder.text = "Paste your API key (sk-ant-...)";
 		placeholder.fontStyle = FontStyles.Italic;
 		placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1);
 		TextMeshProUGUI text = FieldText(area, "Text", font);
@@ -269,12 +255,13 @@ public static class LLMSettingsUI
 		field.textComponent = text;
 		field.placeholder = placeholder;
 		field.fontAsset = font;
-		field.pointSize = textSize;
 		field.targetGraphic = background;
 		field.lineType = TMP_InputField.LineType.SingleLine;
 		field.contentType = TMP_InputField.ContentType.Password;
 		field.characterLimit = 0;
 		field.onFocusSelectAll = true;
+		Place(go, x, y, width, RowHeight);
+		ScaleText(go, 12);// sets the field's point size, which applies to the text and placeholder
 		go.SetActive(true);
 		return field;
 	}
@@ -287,11 +274,23 @@ public static class LLMSettingsUI
 		t.rectTransform.offsetMin = Vector2.zero;
 		t.rectTransform.offsetMax = Vector2.zero;
 		t.font = font;
-		t.fontSize = textSize;
 		t.enableWordWrapping = false;
 		t.overflowMode = TextOverflowModes.Overflow;
 		t.alignment = TextAlignmentOptions.MidlineLeft;
 		t.extraPadding = true;
 		return t;
+	}
+
+	/// <summary>Keeps an auto-sizing button label at most 14pt on a 600px tall screen, scaled with the screen.</summary>
+	private class CappedButtonText : MonoBehaviour
+	{
+		private TMP_Text text;
+
+		private void Update(){
+			if(text == null){
+				text = GetComponent<TMP_Text>();
+			}
+			text.fontSizeMax = 14f * Screen.height / 600f;
+		}
 	}
 }
