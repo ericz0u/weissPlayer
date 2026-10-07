@@ -39,13 +39,14 @@ A cheaper model plays your main phase action by action from your plan, so make f
 - Which characters not to encore (skip_encore).
 Attacks are still chosen by the rules engine; attack_plan is guidance for now.
 
-Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
+Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Cards in hand marked ""can't play right now"" fail a level, color or stock requirement; don't plan to play them this turn unless clocking (which can level you up) would change that. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
 
 	private const string ExecutorPrimer =
 @"You play the main phase of a Weiss Schwarz game for one player, following a gameplan written by a stronger strategist model at the start of the turn.
 Each step you get the plan, the current game state, what you've already done this main phase, and a numbered list of every legal action right now. Pick exactly one option number.
 Follow the plan: field the characters it asks for in the slots it asks for, use the acts and events it names, stay within its stock budget, and end the main phase once the plan is carried out or nothing useful is left. Adapt if the board changed from what the plan expected, for example after an on-play effect drew or searched cards.
-Placing a character on an occupied slot sends the current one to the waiting room. Center stage slots attack; back stage slots support.";
+Placing a character on an occupied slot sends the current one to the waiting room. Center stage slots attack; back stage slots support.
+Climaxes aren't played in the main phase: the climax phase plays the plan's climax by itself, so never wait for one here.";
 
 	public override void AfterDeckCreated() {
 		// AIVersion6 strips comments from AIFileLines, so keep the strategy comments at the top of the file first.
