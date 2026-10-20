@@ -38,7 +38,7 @@ From the root of your simulator project (the folder containing `Assets/`):
    - `Assets/Scripts/GameManager.cs` runs that hook between the draw and clock phases
    - `Assets/Scripts/AI/AIManager.cs` registers AI `Version 8`
    - `Assets/Scripts/OptionsScreen.cs` adds the Claude AI section to the Options screen
-   - `Assets/StreamingAssets/AIData/AIList.txt` adds the `AI_ShionAqua_LLM` deck
+   - `Assets/StreamingAssets/AIData/AIList.txt` adds the `AI_ShionAqua_LLM` and `ALL` decks
 
    If the patch doesn't apply, your simulator version differs from the one this was made for; the changes are small enough to make by hand from the patch file.
 
@@ -47,7 +47,9 @@ From the root of your simulator project (the folder containing `Assets/`):
 1. Open the project in Unity Hub with Unity **2020.3.48f1**.
 2. Open `Assets/Scenes/MainMenu.unity` and press Play.
 3. Go to **Options**. In the **Claude AI** section below the other settings, paste your Anthropic API key and press **Save**, then **Test**. You can also pick the gameplan model (Opus 5.5 or Sonnet 5.5), its thinking effort, and the main-phase model (Sonnet 5.5, Haiku 4.5, or Off to let the scripted AI play the main phase).
-4. Back on the main menu choose **VS Computer** and pick **AI_ShionAqua_LLM** as the AI deck.
+4. Back on the main menu choose **VS Computer** and pick an LLM deck as the AI deck:
+   - **AI_ShionAqua_LLM**: Hololive Shion / Aqua.
+   - **ALL**: Assault Lily (green / red / blue <Lily>), Shenlin + Breath After Breath at level 1, Pure White Shining Lily Yuyu + Count the Important Things burn at level 3. Its strategy notes are at the top of `Assets/StreamingAssets/AIData/ALL AI.txt`.
 
 The thinking window can be dragged, resized from its bottom-right corner, and shown or hidden with **F8**. It shows the AI's hand, so hide it if you want a fair game. Per-game logs go to `~/Library/Application Support/DefaultCompany/Weiss Schwarz/LLMAgentLogs/` on macOS.
 

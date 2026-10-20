@@ -24,6 +24,12 @@
 /Assets/StreamingAssets/DefaultDecks/*
 !/Assets/StreamingAssets/DefaultDecks/AI_ShionAqua_LLM.txt
 !/Assets/StreamingAssets/DefaultDecks/AI_ShionAqua_LLM.txt.meta
+!/Assets/StreamingAssets/DefaultDecks/ALL.txt
+!/Assets/StreamingAssets/DefaultDecks/ALL.txt.meta
+!/Assets/StreamingAssets/AIData/
+/Assets/StreamingAssets/AIData/*
+!/Assets/StreamingAssets/AIData/ALL AI.txt
+!/Assets/StreamingAssets/AIData/ALL AI.txt.meta
 
 .DS_Store
 anthropic_api_key.txt

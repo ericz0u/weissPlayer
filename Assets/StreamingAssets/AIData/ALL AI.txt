@@ -1,0 +1,126 @@
+//Assault Lily (ALL), green / red / blue <Lily> deck
+//
+//Gameplan:
+//The whole deck is <Lily> characters, which turns on most of its power boosts. Keep the stage all <Lily>.
+//Level 0: field searchers and brainstormers. Beyond the Promise, Riri & Yuyu (pay 1 and clock a <Lily> from the waiting room) searches for any level 1 or lower character, usually Proud Pride, Shenlin.
+//"Cuelebre" Makina mills the top card of both decks and salvages a <Lily> if a climax showed up. Pure White Shining Lily, Riri and "Bearing the Name Hervarar" Renka are backstage brainstormers.
+//"Lily of the Season" Yuyu and "Guardian Angel's Vow" Hijiri & Shiori can double trigger on attack; good when digging for climaxes or pushing damage.
+//Level 1: Proud Pride, Shenlin is the main attacker (4000, 7000 on your turn with another <Lily>). With Breath After Breath in the climax area, pay 1 at the end of its attack: look at 5, one <Lily> to hand and one to stock.
+//Little Courage, Yujia goes under Shenlin as a marker to give it +1 soul and let it return to hand or stock when it leaves the stage.
+//Level 2: "Hitotsuyanagi Corps" Yuyu (cost 1) can be played early for a turn: +9000 power, can't be targeted, sends what it reverses to memory, then goes to the waiting room at end of turn.
+//The Strongest Freelancer, Yahiro & Shin is a 2500 backup that can also remove an opponent's early-play character.
+//Level 3: the finisher is Pure White Shining Lily, Yuyu with Count the Important Things: when it attacks it loses all soul, then at the end of its attack pay 2 stock and discard 2 cards to deal 2, 3 and 4 damage.
+//So arrive at level 3 with at least 2 stock per Yuyu swing (4 for two swings) plus 2 spare cards in hand per swing, and another <Lily> on stage.
+//Plunge Forward Lily, Riri fetches Count the Important Things from the waiting room when played, and after attacking with the climax it can go under Yuyu to salvage 2 <Lily> characters and reset the opponent's waiting room into their deck (keeping 2 climaxes there).
+//Tazusa, Blooming Dignifiedly heals when played and sends what it reverses to memory. "Guardian Angel's Vow" Tazusa & Mai can wipe the opponent's stock.
+//Save stock in the late game for Yuyu burns; avoid spending it on counters unless losing a key attacker.
+
+
+Section Header
+ColorPriority Green Red Blue
+Experience 0
+ActMode Auto
+BackstageMode Auto
+
+Section FirstTurnDiscard
+KeepIf CardLevel = 0 && IsCharacter
+KeepCopies(1) [Proud Pride, Shenlin]
+KeepCopies(1) [Beyond the Promise, Riri & Yuyu]
+
+Section ShouldClock
+If(Level == 0){
+	Return(True)
+}
+If(Level == 1){
+	If(Hand < 6){
+		Return(True)
+	}
+}
+If(Level == 2){
+	If(Clock <= 4 && Hand < 5){
+		Return(True)
+	}
+}
+Return(False)
+
+Section GoingFirst_Attacker
+Priority(500) [Beyond the Promise, Riri & Yuyu]
+Priority(400) ["Lily of the Season" Yuyu]
+Priority(300) ["Cuelebre" Makina]
+Priority(250) ["Guardian Angel's Vow" Hijiri & Shiori]
+Priority(200) [Fumi, Time to Relax]
+
+Section GoingFirst_Backstage
+Priority(300) [Pure White Shining Lily, Riri]
+Priority(200) ["Bearing the Name Hervarar" Renka]
+
+Section AttackerValue
+Default(100)
+Priority(800) [Pure White Shining Lily, Yuyu] && Level == 3
+Priority(750) [Plunge Forward Lily, Riri] && Level == 3
+Priority(700) [Tazusa, Blooming Dignifiedly] && Level == 3
+Priority(650) ["Guardian Angel's Vow" Tazusa & Mai] && Level == 3
+Priority(600) ["Hitotsuyanagi Corps" Yuyu]
+Priority(500) [Proud Pride, Shenlin]
+Priority(300) [Little Courage, Yujia]
+Priority(250) [Beyond the Promise, Riri & Yuyu]
+Priority(220) ["Lily of the Season" Yuyu]
+Priority(200) ["Guardian Angel's Vow" Hijiri & Shiori]
+Priority(180) ["Cuelebre" Makina]
+Priority(150) [Fumi, Time to Relax]
+Priority(50) [Pure White Shining Lily, Riri]
+Priority(50) ["Bearing the Name Hervarar" Renka]
+Priority(50) [The Strongest Freelancer, Yahiro & Shin]
+
+Section BackstageValue
+Priority(500) [Pure White Shining Lily, Riri]
+Priority(450) ["Bearing the Name Hervarar" Renka]
+
+Section SearchValue
+Priority(900) [Pure White Shining Lily, Yuyu] && Level >= 2
+Priority(800) [Proud Pride, Shenlin] && Level <= 1
+DuplicatePriority(300) [Proud Pride, Shenlin]
+Priority(700) [Plunge Forward Lily, Riri] && Level >= 2
+Priority(650) [Tazusa, Blooming Dignifiedly] && Level >= 2
+Priority(500) [Beyond the Promise, Riri & Yuyu] && Level == 0
+Priority(450) [Pure White Shining Lily, Riri]
+Priority(400) [Little Courage, Yujia]
+Priority(400) ["Hitotsuyanagi Corps" Yuyu] && Level >= 1
+Priority(350) ["Guardian Angel's Vow" Tazusa & Mai] && Level >= 2
+Priority(300) ["Bearing the Name Hervarar" Renka]
+Priority(250) ["Lily of the Season" Yuyu]
+Priority(250) ["Cuelebre" Makina]
+Priority(200) ["Guardian Angel's Vow" Hijiri & Shiori]
+Priority(200) [The Strongest Freelancer, Yahiro & Shin]
+Priority(100) [Fumi, Time to Relax]
+
+Section ClockValue
+Priority(300) [Fumi, Time to Relax]
+Priority(200) ["Guardian Angel's Vow" Hijiri & Shiori] && Level >= 1
+Priority(200) ["Cuelebre" Makina] && Level >= 1
+
+Section ProtectValue
+Priority(200) [Pure White Shining Lily, Yuyu]
+Priority(150) [Proud Pride, Shenlin]
+
+Section AttackOrder
+//Swing the burn finisher last so earlier damage can't be cancelled by the burn's own reveals
+Priority(-200) [Pure White Shining Lily, Yuyu] && If(Climax Count the Important Things)
+Priority(100) [Proud Pride, Shenlin] && If(Climax Breath After Breath)
+
+Section [Pure White Shining Lily, Riri]
+RestSelfSalvageBrainstorm(1)
+BackstageCategory(Brainstorm)
+
+Section [Tazusa, Blooming Dignifiedly]
+Healer
+
+Section [Breath After Breath]
+ComboLevel(1)
+BasicClimax
+OnAttackCombo([Proud Pride, Shenlin])
+
+Section [Count the Important Things]
+ComboLevel(3)
+BasicClimax
+OnAttackCombo([Pure White Shining Lily, Yuyu])

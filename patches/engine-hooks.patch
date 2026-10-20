@@ -111,10 +111,10 @@ index ee32790..fa9f30e 100644
  
      public void MainMenuPressed(){
 diff --git a/Assets/StreamingAssets/AIData/AIList.txt b/Assets/StreamingAssets/AIData/AIList.txt
-index f71cc86..d1cc7c3 100644
+index f71cc86..d5861bb 100644
 --- a/Assets/StreamingAssets/AIData/AIList.txt
 +++ b/Assets/StreamingAssets/AIData/AIList.txt
-@@ -26,4 +26,9 @@ Version 5
+@@ -26,4 +26,14 @@ Version 5
  Deck AI_AxisChurch
  Name Konosuba Axis Church (old)
  File AxisAIVersion5
@@ -126,3 +126,9 @@ index f71cc86..d1cc7c3 100644
 +Name Hololive Shion Aqua (LLM planner)
 +File Shion Aqua AI
 +Version 8 //AIVersion8: Claude writes a plan each turn, AIVersion6 handles the rest
++
++Deck ALL
++Name Assault Lily (LLM planner)
++File ALL AI
++Version 8 //AIVersion8: Claude writes a plan each turn, AIVersion6 handles the rest
+\ No newline at end of file

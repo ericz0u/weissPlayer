@@ -35,9 +35,11 @@ public static class GameStateSerializer
 		// The AI knows its own deck's contents (not their order), so its own numbers are exact.
 		int myClimaxInDeck = player.deck.GetContents().Count(c => c.IsClimax());
 		sb.AppendLine("Deck: " + player.deck.size + " cards, " + myClimaxInDeck + " climax in it" + Odds(myClimaxInDeck, player.deck.size, "a check or damage reveals a climax"));
-		// Flag cards the rules won't let you play right now (level, color or stock), so plans don't count on them.
-		sb.AppendLine("Hand (" + player.hand.size + "): " + string.Join("; ", player.hand.GetContents().Select(c =>
-			CardStats(c.GetIdentity()) + (c.IsClimax() == false && c.CanPlayFromHand() == false ? " [can't play right now: level, color or stock]" : ""))));
+		// Flag cards the rules won't let you play right now, so plans don't count on them. A climax only passes
+		// CanPlayFromHand during the climax phase, so for climaxes check the color requirement directly.
+		sb.AppendLine("Hand (" + player.hand.size + "): " + string.Join("; ", player.hand.GetContents().Select(c => CardStats(c.GetIdentity())
+			+ (c.IsClimax() ? (player.HasMatchingColor(c) ? "" : " [can't play yet: no " + c.GetColor() + " card in your clock or level]")
+				: (c.CanPlayFromHand() ? "" : " [can't play right now: level, color or stock]")))));
 		sb.AppendLine();
 		sb.AppendLine("== OPPONENT ==");
 		AppendSide(sb, opp, false);
