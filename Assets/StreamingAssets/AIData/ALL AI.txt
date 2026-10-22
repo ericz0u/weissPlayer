@@ -108,6 +108,42 @@ Section AttackOrder
 Priority(-200) [Pure White Shining Lily, Yuyu] && If(Climax Count the Important Things)
 Priority(100) [Proud Pride, Shenlin] && If(Climax Breath After Breath)
 
+//Every card in the deck needs a section, even an empty one, or AIVersion6 shows an error when the deck loads.
+//Auto rules are only set for cards with a single auto ability, so the ability number can't point at the wrong one.
+
+Section [Proud Pride, Shenlin]
+//Pay 1 at the end of its attack with Breath After Breath to dig 5
+AutoIf(1) True
+
+Section [Beyond the Promise, Riri & Yuyu]
+//Pay 1 and clock a <Lily> from the waiting room to search a level 1 or lower character
+AutoIf(1) Stock >= 1
+
+Section [Little Courage, Yujia]
+//Go under Shenlin as a marker for +1 soul
+AutoIf(1) True
+
+Section ["Guardian Angel's Vow" Hijiri & Shiori]
+
+Section ["Guardian Angel's Vow" Tazusa & Mai]
+
+Section [The Strongest Freelancer, Yahiro & Shin]
+
+Section [Pure White Shining Lily, Yuyu]
+
+Section [Plunge Forward Lily, Riri]
+
+Section ["Cuelebre" Makina]
+
+Section ["Lily of the Season" Yuyu]
+
+Section ["Hitotsuyanagi Corps" Yuyu]
+
+Section ["Bearing the Name Hervarar" Renka]
+BackstageCategory(Brainstorm)
+
+Section [Fumi, Time to Relax]
+
 Section [Pure White Shining Lily, Riri]
 RestSelfSalvageBrainstorm(1)
 BackstageCategory(Brainstorm)

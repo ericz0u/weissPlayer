@@ -35,11 +35,7 @@ public static class GameStateSerializer
 		// The AI knows its own deck's contents (not their order), so its own numbers are exact.
 		int myClimaxInDeck = player.deck.GetContents().Count(c => c.IsClimax());
 		sb.AppendLine("Deck: " + player.deck.size + " cards, " + myClimaxInDeck + " climax in it" + Odds(myClimaxInDeck, player.deck.size, "a check or damage reveals a climax"));
-		// Flag cards the rules won't let you play right now, so plans don't count on them. A climax only passes
-		// CanPlayFromHand during the climax phase, so for climaxes check the color requirement directly.
-		sb.AppendLine("Hand (" + player.hand.size + "): " + string.Join("; ", player.hand.GetContents().Select(c => CardStats(c.GetIdentity())
-			+ (c.IsClimax() ? (player.HasMatchingColor(c) ? "" : " [can't play yet: no " + c.GetColor() + " card in your clock or level]")
-				: (c.CanPlayFromHand() ? "" : " [can't play right now: level, color or stock]")))));
+		sb.AppendLine("Hand (" + player.hand.size + "): " + string.Join("; ", player.hand.GetContents().Select(c => CardStats(c.GetIdentity()) + PlayIssue(player, c))));
 		sb.AppendLine();
 		sb.AppendLine("== OPPONENT ==");
 		AppendSide(sb, opp, false);
@@ -82,6 +78,28 @@ public static class GameStateSerializer
 			return;
 		}
 		sb.AppendLine(label + ": " + card.name + " [L" + card.GetLevel() + " " + card.GetPower() + "p " + card.GetSoul() + "s " + card.battlePosition + "]");
+	}
+
+	/// <summary>
+	/// Why a card in hand can't be played with the current level, colors and stock, or "" if it can.
+	/// DeckCard.CanPlayFromHand can't be used here: it only passes during the main phase (climax phase for climaxes),
+	/// and the plan is written before the clock phase.
+	/// </summary>
+	private static string PlayIssue(Player player, DeckCard card){
+		bool colorOk = player.HasMatchingColor(card) || card.HasAppliedEffect(AppliedEffectType.IgnoreColorRequirement);
+		if(card.IsClimax()){
+			return colorOk ? "" : " [can't play yet: no " + card.GetColor() + " card in your clock or level]";
+		}
+		List<string> issues = new List<string>();
+		if(card.GetLevel() > player.level){
+			issues.Add("level " + card.GetLevel() + ", you are level " + player.level);
+		}else if(card.GetLevel() > 0 && colorOk == false){
+			issues.Add("no " + card.GetColor() + " card in your clock or level");
+		}
+		if(card.GetCost() > player.stock.size){
+			issues.Add("costs " + card.GetCost() + ", you have " + player.stock.size + " stock");
+		}
+		return issues.Count == 0 ? "" : " [can't play yet: " + string.Join("; ", issues) + "]";
 	}
 
 	private static string Odds(int count, int total, string what){

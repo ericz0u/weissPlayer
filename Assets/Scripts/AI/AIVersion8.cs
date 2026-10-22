@@ -39,7 +39,7 @@ A cheaper model plays your main phase action by action from your plan, so make f
 - Which characters not to encore (skip_encore).
 Attacks are still chosen by the rules engine; attack_plan is guidance for now.
 
-Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Cards in hand marked ""can't play right now"" fail a level, color or stock requirement; don't plan to play them this turn unless clocking (which can level you up) would change that. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
+Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Cards in hand marked ""can't play yet"" fail a level, color or stock requirement right now (the reason is given); don't plan to play them this turn unless clocking would fix it, for example by leveling up or putting the needed color into your level or clock. Everything else in hand is playable. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
 
 	private const string ExecutorPrimer =
 @"You play the main phase of a Weiss Schwarz game for one player, following a gameplan written by a stronger strategist model at the start of the turn.
