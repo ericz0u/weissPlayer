@@ -9,7 +9,9 @@ This repository is a mod: it contains only the new AI code and a small patch for
 The AI works in two tiers:
 
 1. **Strategist (Opus 5.5 by default), once per turn.** After the draw phase and before clocking, it reads the board, the deck list and the opponent's position (damage, levels, climaxes left in their deck, board threats) and writes a gameplan: posture (aggro, setup, control, defensive), how much damage to push, whether to wipe or trade with the opponent's board, what to field in each slot, what to play, how much stock to spend, and whether to play a climax.
-2. **Executor (Sonnet 5.5 or Haiku 4.5), during the main phase.** It plays the main phase one action at a time. Each step it gets the plan, the board and a numbered list of every legal action from the engine (play a character to a slot, play an event, use an act ability, move a character, or end the phase) and picks one. Plays that would go over the plan's stock budget aren't offered.
+2. **Executor (Sonnet 5.5 or Haiku 4.5), during the main and attack phases.** It plays the main phase one action at a time. Each step it gets the plan, the board and a numbered list of every legal action from the engine (play a character to a slot, play an event, use an act ability, move a character, or end the phase) and picks one. Plays that would go over the plan's stock budget aren't offered. In the attack phase it picks each attack (frontal, side or direct, and the target) the same way, following the plan's attack plan.
+
+The strategist sees both boards (including the text of the opponent's cards on stage and every opponent card seen so far), clocks, levels, waiting rooms, stock and deck sizes, and estimated cancel odds. Each turn it also gets a log of what happened since its last plan (plays, attacks, damage and cancels, triggers, counters and events used) and its own running notes from earlier turns, which it rewrites every turn. Its instructions include general Weiss Schwarz principles, such as not overextending going second at level 0, not playing a climax every turn without a reason, and managing the opponent's clock around their level 3 turn.
 
 The plan also decides directly, until the AI's next turn:
 
@@ -19,7 +21,7 @@ The plan also decides directly, until the AI's next turn:
 - salvage and search targets
 - counter policy, and which characters not to encore
 
-Attacks and effect choices that come up mid-action (targets, searches triggered by a card) still use the simulator's scripted AI (AIVersion6). AIVersion6 also takes over the main phase if the executor gives two unusable answers, and the whole turn if the strategist call fails.
+Effect choices that come up mid-action (targets, searches triggered by a card) still use the simulator's scripted AI (AIVersion6). AIVersion6 also takes over the main or attack phase if the executor gives two unusable answers, and the whole turn if the strategist call fails.
 
 During a game, a window shows the AI's thinking as it streams in, its plan, each decision and the cost per turn.
 

@@ -19,10 +19,15 @@ public class AIVersion8 : AIVersion6
 	private string logPath = null;
 	private float gameCost = 0;
 	private string executorSystemPrompt = null;
+	private TurnLog turnLog = null;
+	/// <summary>Log text not yet seen by a successful plan (kept if a planning call fails).</summary>
+	private string unplannedLog = "";
+	/// <summary>The strategist's running notes from its last successful plan.</summary>
+	private string gameNotes = "";
 
 	/// <summary>Most actions the executor may take in one main phase, so a confused model can't loop forever.</summary>
 	private const int MaxMainPhaseActions = 15;
-	/// <summary>After this many unusable answers in one main phase, AIVersion6 finishes the phase.</summary>
+	/// <summary>After this many unusable answers in one phase, AIVersion6 finishes the phase.</summary>
 	private const int MaxExecutorFailures = 2;
 
 	private const string RulesPrimer =
@@ -37,13 +42,26 @@ A cheaper model plays your main phase action by action from your plan, so make f
 - Whether to play a climax and which (climax_plan).
 - Countering during the opponent's attacks (counter_policy, protect_cards, stock_to_reserve).
 - Which characters not to encore (skip_encore).
-Attacks are still chosen by the rules engine; attack_plan is guidance for now.
+The same model also chooses attacks from your attack_plan, so say which attacks to make in what order, and which to avoid and why.
 
-Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Cards in hand marked ""can't play yet"" fail a level, color or stock requirement right now (the reason is given); don't plan to play them this turn unless clocking would fix it, for example by leveling up or putting the needed color into your level or clock. Everything else in hand is playable. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.";
+Keep game_notes as your memory between turns. You get them back next turn together with a log of what happened since this plan. Record what the opponent has shown and what it means for later turns, for example an anti-change or reverse-trigger counter, a healer, a finisher in their deck, or how many climaxes they've used, and rewrite the notes each turn.
+
+Use exact card names from the deck list. Only name cards that are actually in the zone the decision draws from. Cards in hand marked ""can't play yet"" fail a level, color or stock requirement right now (the reason is given); don't plan to play them this turn unless clocking would fix it, for example by leveling up or putting the needed color into your level or clock. Everything else in hand is playable. Remember the clock phase comes before the main phase: if you clock, you draw 2 first.
+
+General Weiss Schwarz principles to apply (they're judgment calls, not absolute rules):
+- Hand and playables: don't empty your hand onto the field unless you can refill it next turn. Going second at level 0, don't fill all three center slots if you can't get cards back next turn: if the opponent then holds back damage and leaves you at level 0, you'll have nothing to play. Keep enough playables for your next turn.
+- Climaxes: you don't need to play one every turn. Play one when it has a combo with your attackers, when its soul is what lets you reach a damage goal, or when you have spare climaxes in hand. Otherwise keep it for a combo turn later or use it as clock fodder.
+- The opponent's clock: think about where your damage leaves them. If their level 3 or finisher turn is dangerous (finishers or healers in their deck or likely in hand, lots of stock), consider leaving them at 2-4 or 2-5 instead of 2-6, so clocking can't take them to level 3 on their own turn. Conversely, push damage hard when they're close to losing.
+- Damage and cancels: each damage instance is cancelled if a climax is revealed, so judge damage by the opponent's remaining climax density. Several small attacks spread the cancel risk; a big soul hit is all or nothing. After the opponent refreshes, their deck is climax-dense until it thins out.
+- Frontal attacks: before frontal attacking, read the defender's text for effects that punish you when it's reversed or when it reverses your character, and remember counters the opponent has shown (see your notes). Side attack or direct attack when a frontal attack would lose you a character you need, or when the battle is pointless.
+- Stock: build stock before level 3 for healers, finishers and counters. Don't spend it on low-value plays when you'll need it for your level 3 turn.
+- Refresh: refreshing costs 1 damage. Watch your deck size, and prefer refreshing when your waiting room has a good number of climaxes in it.
+- Levels: when you level up, the card you put in the level zone gives that color, so choose it to enable the cards and climaxes you'll need.";
 
 	private const string ExecutorPrimer =
-@"You play the main phase of a Weiss Schwarz game for one player, following a gameplan written by a stronger strategist model at the start of the turn.
-Each step you get the plan, the current game state, what you've already done this main phase, and a numbered list of every legal action right now. Pick exactly one option number.
+@"You play the main phase and the attacks of a Weiss Schwarz game for one player, following a gameplan written by a stronger strategist model at the start of the turn.
+Each step you get the plan, the current game state, what you've already done this phase, and a numbered list of every legal action right now. Pick exactly one option number.
+In the attack phase, follow the plan's attack_plan and its notes: attack in the order it gives, and avoid attacks it warns against. Before a frontal attack, read the defender's text in the game state. A side attack loses soul equal to the defender's level; a direct attack (empty lane) gets +1 soul.
 Follow the plan: field the characters it asks for in the slots it asks for, use the acts and events it names, stay within its stock budget, and end the main phase once the plan is carried out or nothing useful is left. Adapt if the board changed from what the plan expected, for example after an on-play effect drew or searched cards.
 Placing a character on an occupied slot sends the current one to the waiting room. Center stage slots attack; back stage slots support.
 Climaxes aren't played in the main phase: the climax phase plays the plan's climax by itself, so never wait for one here.";
@@ -78,6 +96,20 @@ Climaxes aren't played in the main phase: the climax phase plays the plan's clim
 		if(plan != null){
 			state += "\nYour plan from last turn was: " + plan.summary;
 		}
+		if(gameNotes.Length > 0){
+			state += "\n\n# Your notes from earlier turns\n" + gameNotes;
+		}
+		if(turnLog != null){
+			string log = turnLog.TakeLog();
+			unplannedLog = unplannedLog.Length > 0 ? unplannedLog + "\n" + log : log;
+			string seen = GameStateSerializer.OpponentCardsSeen(player, turnLog.opponentCardsSeen);
+			if(seen.Length > 0){
+				state += "\n\n# Other opponent cards seen this game\n" + seen;
+			}
+		}
+		if(unplannedLog.Length > 0){
+			state += "\n\n# What happened since your last plan\n" + unplannedLog;
+		}
 
 		LLMThoughtsWindow window = LLMThoughtsWindow.Instance;
 		window.BeginTurn("Turn " + player.game.turnCounter + " - " + ClaudePlanner.model + ", " + ClaudePlanner.effort + " effort");
@@ -104,6 +136,8 @@ Climaxes aren't played in the main phase: the climax phase plays the plan's clim
 		}
 		plan = newPlan;// null means every decision falls back to AIVersion6 this turn
 		if(plan != null){
+			unplannedLog = "";
+			gameNotes = plan.game_notes ?? "";
 			window.ShowPlan(plan, footer);
 			Say("Plan: " + plan.summary);
 		}else{
@@ -188,6 +222,96 @@ Climaxes aren't played in the main phase: the climax phase plays the plan's clim
 			Decision("Main: handing the rest of the main phase to AIVersion6");
 			yield return StartCoroutine(base.AIMainPhase());
 		}
+	}
+
+	public override IEnumerator AIAttackPhase() {
+		string executor = ClaudePlanner.executorModel;
+		if(plan == null || string.IsNullOrEmpty(executor)){
+			yield return StartCoroutine(base.AIAttackPhase());
+			yield break;
+		}
+		if(executorSystemPrompt == null){
+			executorSystemPrompt = ExecutorPrimer + "\n\n# Your deck\n" + GameStateSerializer.DeckList(player);
+		}
+
+		LLMThoughtsWindow window = LLMThoughtsWindow.Instance;
+		window.BeginSection("Attacks - " + executor);
+		int failures = 0;
+		List<string> history = new List<string>();
+		for(int step = 0; step < 6 && player.game.phase == Phase.Attack && player.game.gameEnded == false; step++){
+			// Only one attack is allowed on the first turn of the game.
+			if(player.game.firstTurn && player.attacksThisTurn >= 1){
+				break;
+			}
+			List<MainPhaseActions.Option> options = MainPhaseActions.BuildAttacks(player);
+			if(options.Count == 1){
+				break;
+			}
+
+			string prompt = "# Gameplan\n" + plan.DescribeForMainPhase()
+				+ "\n# Game state\n" + GameStateSerializer.CurrentState(player)
+				+ "\n# Attacks so far this turn\n" + (history.Count > 0 ? string.Join("\n", history) : "none yet")
+				+ (player.game.firstTurn ? "\n\nThis is the first turn of the game: only one attack is allowed." : "")
+				+ "\n\n# Legal attacks\n" + MainPhaseActions.Numbered(options);
+
+			string json = null;
+			string error = null;
+			float started = Time.realtimeSinceStartup;
+			yield return StartCoroutine(ClaudePlanner.Request(executor, "low", MainPhaseActions.ChoiceSchema, executorSystemPrompt, prompt, 4000,
+				(j, e) => { json = j; error = e; }));
+			string cost = AddCost(executor, Time.realtimeSinceStartup - started);
+
+			MainPhaseActions.Choice choice = ParseChoice(json);
+			if(choice == null || choice.option < 0 || choice.option >= options.Count){
+				failures++;
+				Decision("Attack: unusable answer (" + (error ?? json) + ")");
+				if(failures >= MaxExecutorFailures){
+					Decision("Attack: handing the remaining attacks to AIVersion6");
+					yield return StartCoroutine(base.AIAttackPhase());
+					yield break;
+				}
+				continue;
+			}
+			MainPhaseActions.Option chosen = options[choice.option];
+			Decision("Attack: " + chosen.description + " - " + choice.reason + " [" + cost + "]");
+			if(chosen.run == null){
+				yield break;
+			}
+			int attacksBefore = player.attacksThisTurn;
+			yield return StartCoroutine(chosen.run());
+			if(player.attacksThisTurn == attacksBefore){
+				failures++;
+				Decision("Attack: that attack didn't happen");
+				if(failures >= MaxExecutorFailures){
+					yield return StartCoroutine(base.AIAttackPhase());
+					yield break;
+				}
+			}else{
+				history.Add("- " + chosen.description);
+			}
+		}
+	}
+
+	private static MainPhaseActions.Choice ParseChoice(string json){
+		if(json == null){
+			return null;
+		}
+		try{
+			return JsonUtility.FromJson<MainPhaseActions.Choice>(json);
+		}catch(System.Exception){
+			return null;
+		}
+	}
+
+	/// <summary>Runs every frame (AI.Update); keeps the turn log up to date.</summary>
+	protected override void DebugUpdate() {
+		if(turnLog == null){
+			if(player == null || player.opponent == null || player.myCards.Count == 0 || player.opponent.myCards.Count == 0){
+				return;
+			}
+			turnLog = new TurnLog(player);
+		}
+		turnLog.Poll();
 	}
 
 	public override IEnumerator AIClimaxPhase() {

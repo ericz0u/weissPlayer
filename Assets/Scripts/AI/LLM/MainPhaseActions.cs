@@ -116,6 +116,50 @@ public static class MainPhaseActions
 		return options;
 	}
 
+	/// <summary>
+	/// Every attack the engine allows right now, one option per attacker and attack type, with "End the attack phase" first.
+	/// </summary>
+	public static List<Option> BuildAttacks(Player player){
+		List<Option> options = new List<Option>{ new Option{ description = "End the attack phase (no more attacks this turn)", run = null } };
+		foreach(DeckCard card in player.GetCardsInLocation(GameLocation.CenterStage)){
+			if(card.battlePosition != CardPosition.Stand){
+				continue;
+			}
+			string attacker = card.name + " (" + SlotName(player, card.location) + ", " + card.GetPower() + "p " + card.GetSoul() + "s)";
+			foreach(CardAction action in card.GetActionList(false, player)){
+				DeckCard a = card;
+				DeckCard target = action.attackTarget;
+				switch(action.actionType){
+					case CardActionType.DirectAttack:
+						options.Add(new Option{ description = "Direct attack with " + attacker + ": +1 soul, no battle", run = () => player.DirectAttack(a) });
+					break;
+					case CardActionType.SideAttack:
+						if(target != null){
+							options.Add(new Option{ description = "Side attack with " + attacker + " into " + DescribeDefender(target)
+								+ ": soul -" + target.GetLevel() + ", no battle", run = () => player.SideAttack(a, target) });
+						}
+					break;
+					case CardActionType.FrontalAttack:
+					case CardActionType.FrontalAttackLeftCenterStage:
+					case CardActionType.FrontalAttackMiddleCenterStage:
+					case CardActionType.FrontalAttackRightCenterStage:
+					case CardActionType.FrontalAttackLeftBackstage:
+					case CardActionType.FrontalAttackRightBackstage:
+						if(target != null){
+							options.Add(new Option{ description = "Frontal attack with " + attacker + " into " + DescribeDefender(target) + ": battle",
+								run = () => player.FrontalAttack(a, target) });
+						}
+					break;
+				}
+			}
+		}
+		return options;
+	}
+
+	private static string DescribeDefender(DeckCard target){
+		return target.name + " (L" + target.GetLevel() + " " + target.GetPower() + "p, " + target.battlePosition + ")";
+	}
+
 	public static string Numbered(List<Option> options){
 		StringBuilder sb = new StringBuilder();
 		for(int i = 0; i < options.Count; i++){

@@ -86,6 +86,9 @@ public class LLMThoughtsWindow : MonoBehaviour
 		sb.Append("  <b>").Append(Escape(plan.posture)).Append("</b>, board: ").Append(Escape(plan.board_goal))
 			.Append(". Damage: ").Append(Escape(plan.damage_goal)).Append('\n');
 		sb.Append("  Opponent: ").Append(Escape(plan.opponent_read)).Append('\n');
+		if(plan.game_notes.Length > 0){
+			sb.Append("  Notes: ").Append(Escape(plan.game_notes)).Append('\n');
+		}
 		foreach(string c in plan.considerations){
 			sb.Append("  - ").Append(Escape(c)).Append('\n');
 		}

@@ -21,6 +21,11 @@ public class TurnPlan
 	public List<string> removal_targets = new List<string>();
 	public string summary = "";
 	public List<string> considerations = new List<string>();
+	/// <summary>
+	/// Running notes carried from turn to turn: what the opponent has shown (counters, anti-change effects, finishers,
+	/// healers) and the longer-term plan. Given back to the strategist next turn, which rewrites them.
+	/// </summary>
+	public string game_notes = "";
 
 	// ---- This turn's main phase ----
 	public FieldPlan field_plan = new FieldPlan();
@@ -85,6 +90,9 @@ public class TurnPlan
 		sb.AppendLine("Posture: " + posture + ". Damage goal: " + damage_goal + ". Board goal: " + board_goal
 			+ (removal_targets.Count > 0 ? " (remove " + string.Join(", ", removal_targets) + ")" : "") + ".");
 		sb.AppendLine("Opponent read: " + opponent_read);
+		if(game_notes.Length > 0){
+			sb.AppendLine("Notes from earlier turns: " + game_notes);
+		}
 		sb.AppendLine("Field plan at end of main phase: left center " + field_plan.left_center + "; middle center " + field_plan.middle_center
 			+ "; right center " + field_plan.right_center + "; left back " + field_plan.left_back + "; right back " + field_plan.right_back);
 		sb.AppendLine("Play order: " + (play_order.Count > 0 ? string.Join(", ", play_order) : "none"));
@@ -105,7 +113,7 @@ public class TurnPlan
 	public const string JsonSchema = @"{
   ""type"": ""object"",
   ""additionalProperties"": false,
-  ""required"": [""opponent_read"", ""posture"", ""damage_goal"", ""board_goal"", ""removal_targets"", ""summary"", ""considerations"", ""field_plan"", ""play_order"", ""acts_and_events"", ""stock_budget"", ""climax_plan"", ""attack_plan"", ""should_clock"", ""clock_card"", ""hold_cards"", ""discard_priority"", ""search_priority"", ""counter_policy"", ""protect_cards"", ""skip_encore"", ""stock_to_reserve""],
+  ""required"": [""opponent_read"", ""posture"", ""damage_goal"", ""board_goal"", ""removal_targets"", ""summary"", ""considerations"", ""game_notes"", ""field_plan"", ""play_order"", ""acts_and_events"", ""stock_budget"", ""climax_plan"", ""attack_plan"", ""should_clock"", ""clock_card"", ""hold_cards"", ""discard_priority"", ""search_priority"", ""counter_policy"", ""protect_cards"", ""skip_encore"", ""stock_to_reserve""],
   ""properties"": {
     ""opponent_read"": {""type"": ""string"", ""description"": ""The opponent's position: damage, level, likely next turn, threats on their board, climaxes left in their deck and how likely damage is to be cancelled.""},
     ""posture"": {""type"": ""string"", ""enum"": [""aggro"", ""setup"", ""control"", ""defensive""]},
@@ -114,6 +122,7 @@ public class TurnPlan
     ""removal_targets"": {""type"": ""array"", ""items"": {""type"": ""string""}, ""description"": ""Exact names of opponent characters to reverse or remove this turn.""},
     ""summary"": {""type"": ""string"", ""description"": ""One or two sentences: the plan for this turn and the opponent's next turn.""},
     ""considerations"": {""type"": ""array"", ""items"": {""type"": ""string""}, ""description"": ""Key risks and reasons behind the plan.""},
+    ""game_notes"": {""type"": ""string"", ""description"": ""Running notes for your future turns: what the opponent has shown (counters, anti-change or reverse effects, healers, finishers, deck plan), what they likely still hold, and your longer-term plan. Rewrite them from last turn's notes, keeping what still matters and adding what you learned.""},
     ""field_plan"": {
       ""type"": ""object"",
       ""additionalProperties"": false,
@@ -140,7 +149,7 @@ public class TurnPlan
         ""reason"": {""type"": ""string""}
       }
     },
-    ""attack_plan"": {""type"": ""string"", ""description"": ""Per center slot: front, side or direct attack and against what.""},
+    ""attack_plan"": {""type"": ""string"", ""description"": ""Per center slot: front, side or direct attack and against what, and in what order. Say which attacks to avoid and why (e.g. a reverse-trigger effect, a likely counter).""},
     ""should_clock"": {""type"": ""boolean""},
     ""clock_card"": {""type"": ""string"", ""description"": ""Exact name of a card in hand to clock, or empty string.""},
     ""hold_cards"": {""type"": ""array"", ""items"": {""type"": ""string""}, ""description"": ""Exact card names to keep in hand.""},

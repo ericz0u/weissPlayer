@@ -45,6 +45,39 @@ public static class GameStateSerializer
 		sb.AppendLine("Deck: " + opp.deck.size + " cards. About " + unseen + " of their 8 climax not seen yet (in deck, hand or stock)"
 			+ Odds(unseen, hidden, "each damage instance is cancelled, roughly"));
 		sb.AppendLine("Hand: " + opp.hand.size + " cards (hidden)");
+		// Their cards' effects decide whether attacking into them is safe (e.g. "when this becomes reversed, ..."),
+		// so include the text of everything on their stage and in their climax area.
+		List<DeckCard> visible = opp.GetCardsInLocation(GameLocation.Stage).Concat(opp.climax.GetContents()).ToList();
+		if(visible.Count > 0){
+			sb.AppendLine("Opponent's cards on stage and in the climax area:");
+			sb.Append(CardTexts(visible.Select(c => c.GetIdentity())));
+		}
+		return sb.ToString();
+	}
+
+	/// <summary>
+	/// Text of opponent cards seen earlier in the game (used counters and events, cards that went through the waiting room),
+	/// leaving out ones currently on their stage, which CurrentState already lists.
+	/// </summary>
+	public static string OpponentCardsSeen(Player player, IEnumerable<string> names){
+		Player opp = player.opponent;
+		HashSet<string> onStage = new HashSet<string>(opp.GetCardsInLocation(GameLocation.Stage).Concat(opp.climax.GetContents()).Select(c => c.name));
+		var cards = names.Where(n => onStage.Contains(n) == false)
+			.Select(n => opp.myCards.FirstOrDefault(c => c.name == n))
+			.Where(c => c != null)
+			.Select(c => c.GetIdentity());
+		return CardTexts(cards);
+	}
+
+	private static string CardTexts(IEnumerable<WeissCard> cards){
+		StringBuilder sb = new StringBuilder();
+		foreach(WeissCard id in cards.GroupBy(c => c.name).Select(g => g.First())){
+			sb.Append("  ").AppendLine(CardStats(id));
+			string text = CardText(id);
+			if(text.Length > 0){
+				sb.Append("    ").AppendLine(text.Replace("\n", "\n    "));
+			}
+		}
 		return sb.ToString();
 	}
 
